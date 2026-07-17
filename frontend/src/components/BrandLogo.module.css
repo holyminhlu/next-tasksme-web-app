@@ -5,6 +5,7 @@
   height: 88px;
   overflow: hidden;
   flex: 0 0 auto;
+  border-radius: 18px;
 }
 
 .logo img {
