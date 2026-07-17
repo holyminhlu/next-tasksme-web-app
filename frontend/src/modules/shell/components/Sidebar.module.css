@@ -1,0 +1,174 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--shell-sidebar-width);
+  flex-shrink: 0;
+  border-right: 1px solid var(--ds-color-border);
+  background: var(--ds-color-surface);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  transition: width var(--ds-transition);
+}
+
+.collapsed {
+  width: var(--shell-sidebar-collapsed-width);
+}
+
+.header {
+  padding: 12px;
+  border-bottom: 1px solid var(--ds-color-border);
+}
+
+.nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 14px 10px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sectionTitle {
+  padding: 0 10px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ds-color-text-subtle);
+  white-space: nowrap;
+}
+
+.collapsed .sectionTitle {
+  display: none;
+}
+
+.itemRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Stretch the tooltip wrapper (collapsed mode) so items fill the row. */
+.itemRow > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-color-text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.item:hover {
+  background: var(--ds-color-surface-hover);
+  color: var(--ds-color-text);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: -1px;
+}
+
+.itemActive {
+  background: var(--ds-color-primary-soft);
+  color: var(--ds-color-primary);
+}
+
+.itemIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.itemLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collapsed .item {
+  justify-content: center;
+  padding: 10px;
+}
+
+.collapsed .itemLabel {
+  display: none;
+}
+
+.pinButton {
+  position: absolute;
+  right: 6px;
+  opacity: 0;
+  transition: opacity var(--ds-transition-fast);
+}
+
+.itemRow:hover .pinButton,
+.itemRow:focus-within .pinButton {
+  opacity: 1;
+}
+
+.collapsed .pinButton {
+  display: none;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-top: 1px solid var(--ds-color-border);
+}
+
+.footerButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--ds-radius-md);
+  background: transparent;
+  color: var(--ds-color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.footerButton:hover {
+  background: var(--ds-color-surface-hover);
+  color: var(--ds-color-text);
+}
+
+.footerButton:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: -1px;
+}
+
+.collapsed .footerButton {
+  justify-content: center;
+}
+
+.collapsed .footerLabel {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}

@@ -1,0 +1,191 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--shell-topbar-height);
+  padding: 0 16px;
+  background: var(--ds-color-surface);
+  border-bottom: 1px solid var(--ds-color-border);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.searchButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--ds-color-border-strong);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-color-surface);
+  color: var(--ds-color-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.searchButton:hover {
+  border-color: var(--ds-color-primary);
+  color: var(--ds-color-text);
+}
+
+.searchButton:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.shortcutHint {
+  font-size: 0.72rem;
+  color: var(--ds-color-text-subtle);
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-sm);
+  padding: 1px 5px;
+}
+
+.bellWrapper {
+  position: relative;
+}
+
+.unreadBadge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-color-danger);
+  color: var(--ds-color-on-primary);
+  font-size: 0.64rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.avatarButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--ds-color-border-strong);
+  border-radius: 50%;
+  background: var(--ds-color-primary-soft);
+  color: var(--ds-color-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.avatarButton:hover {
+  border-color: var(--ds-color-primary);
+}
+
+.avatarButton:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.userSummary {
+  padding: 8px 10px 4px;
+}
+
+.userName {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ds-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userEmail {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ds-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumbs {
+  min-width: 0;
+}
+
+.breadcrumbList {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  overflow: hidden;
+}
+
+.breadcrumbItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.breadcrumbLink {
+  color: var(--ds-color-text-muted);
+  border-radius: var(--ds-radius-sm);
+  padding: 2px 4px;
+}
+
+.breadcrumbLink:hover {
+  color: var(--ds-color-primary);
+}
+
+.breadcrumbLink:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 0;
+}
+
+.breadcrumbCurrent {
+  color: var(--ds-color-text);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumbSeparator {
+  color: var(--ds-color-text-subtle);
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .searchLabel,
+  .shortcutHint {
+    display: none;
+  }
+
+  .searchButton {
+    padding: 7px;
+    border-radius: var(--ds-radius-md);
+  }
+
+  .breadcrumbItem:not(:last-child) {
+    display: none;
+  }
+}

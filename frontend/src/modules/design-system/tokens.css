@@ -1,0 +1,122 @@
+/*
+ * Task SME design tokens (Phase 3 app shell).
+ *
+ * Variables only — no element styling — so importing this file globally is
+ * safe for pre-existing pages (auth, onboarding) that use hardcoded colors.
+ * A future root theme provider can take over ownership of [data-theme].
+ */
+
+:root {
+  /* Typography */
+  --ds-font-sans: Arial, Helvetica, sans-serif;
+
+  /* Surfaces */
+  --ds-color-bg: #f8fafc;
+  --ds-color-surface: #ffffff;
+  --ds-color-surface-hover: #f1f5f9;
+  --ds-color-surface-sunken: #f1f5f9;
+  --ds-color-border: #e2e8f0;
+  --ds-color-border-strong: #cbd5e1;
+  --ds-color-overlay: rgba(15, 23, 42, 0.45);
+
+  /* Text */
+  --ds-color-text: #0f172a;
+  --ds-color-text-muted: #64748b;
+  --ds-color-text-subtle: #94a3b8;
+  --ds-color-text-inverse: #ffffff;
+
+  /* Brand */
+  --ds-color-primary: #2563eb;
+  --ds-color-primary-hover: #1d4ed8;
+  --ds-color-primary-soft: #eff6ff;
+  --ds-color-primary-soft-border: #bfdbfe;
+  --ds-color-on-primary: #ffffff;
+
+  /* Status */
+  --ds-color-danger: #dc2626;
+  --ds-color-danger-hover: #b91c1c;
+  --ds-color-danger-soft: #fee2e2;
+  --ds-color-danger-soft-text: #991b1b;
+  --ds-color-success: #16a34a;
+  --ds-color-success-soft: #dcfce7;
+  --ds-color-success-soft-text: #166534;
+  --ds-color-warning: #d97706;
+  --ds-color-warning-soft: #fef3c7;
+  --ds-color-warning-soft-text: #92400e;
+
+  /* Focus */
+  --ds-color-focus-ring: #93c5fd;
+
+  /* Radius */
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 10px;
+  --ds-radius-lg: 16px;
+  --ds-radius-full: 999px;
+
+  /* Elevation */
+  --ds-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --ds-shadow-md: 0 6px 18px rgba(15, 23, 42, 0.08);
+  --ds-shadow-lg: 0 16px 42px rgba(15, 23, 42, 0.16);
+
+  /* Motion */
+  --ds-transition-fast: 120ms ease;
+  --ds-transition: 180ms ease;
+
+  /* Layering */
+  --ds-z-dropdown: 40;
+  --ds-z-drawer: 50;
+  --ds-z-dialog: 60;
+  --ds-z-toast: 70;
+  --ds-z-tooltip: 80;
+
+  /* Shell dimensions */
+  --shell-sidebar-width: 264px;
+  --shell-sidebar-collapsed-width: 68px;
+  --shell-topbar-height: 56px;
+  --shell-bottom-nav-height: 56px;
+}
+
+:root[data-theme="dark"] {
+  --ds-color-bg: #0b1220;
+  --ds-color-surface: #101a2c;
+  --ds-color-surface-hover: #18233a;
+  --ds-color-surface-sunken: #0d1526;
+  --ds-color-border: #22304a;
+  --ds-color-border-strong: #35486b;
+  --ds-color-overlay: rgba(2, 6, 16, 0.6);
+
+  --ds-color-text: #e6edf7;
+  --ds-color-text-muted: #9db0cb;
+  --ds-color-text-subtle: #6d80a0;
+  --ds-color-text-inverse: #0f172a;
+
+  --ds-color-primary: #3b82f6;
+  --ds-color-primary-hover: #60a5fa;
+  --ds-color-primary-soft: #172a4a;
+  --ds-color-primary-soft-border: #274a80;
+  --ds-color-on-primary: #ffffff;
+
+  --ds-color-danger: #f87171;
+  --ds-color-danger-hover: #fca5a5;
+  --ds-color-danger-soft: #3c1a1f;
+  --ds-color-danger-soft-text: #fca5a5;
+  --ds-color-success: #4ade80;
+  --ds-color-success-soft: #122e1e;
+  --ds-color-success-soft-text: #86efac;
+  --ds-color-warning: #fbbf24;
+  --ds-color-warning-soft: #33240c;
+  --ds-color-warning-soft-text: #fcd34d;
+
+  --ds-color-focus-ring: #2563eb;
+
+  --ds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ds-shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --ds-shadow-lg: 0 16px 42px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ds-transition-fast: 0ms;
+    --ds-transition: 0ms;
+  }
+}

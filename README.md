@@ -124,6 +124,30 @@ UI routes:
 - `/dashboard`, `/members`
 - `/session-expired`, `/forbidden`
 
+## Phase 3 App Shell & Design System
+
+UI routes (authenticated, `(app)` layout):
+
+- `/dashboard`, `/my-tasks`, `/projects`, `/notifications`
+- `/settings` (+ profile, security, notifications, workspace, members, roles, modules, danger zone)
+- `/members` (legacy; also available under Settings → Members)
+
+Shell features:
+
+- Responsive sidebar / icon rail / mobile drawer + bottom nav
+- Workspace switcher, breadcrumbs, command palette (`Ctrl/Cmd+K`)
+- Quick create (preview dialogs), local notification center, theme + focus mode (`Ctrl/Cmd+Shift+F`)
+- Navigation filtered by workspace type, role permissions, and enabled modules (real API)
+
+PWA & resilience:
+
+- Web app manifest, service worker (`/sw.js`, production only), install/update prompts
+- `/offline`, `/maintenance`, global `error.tsx` / `not-found.tsx`
+
+Design system: `frontend/src/modules/design-system/` (tokens + primitives). Shell: `frontend/src/modules/shell/`.
+
+Note: some settings forms are read-only until later-phase APIs; shell notifications are local-only and labeled as such.
+
 Flows:
 
 - **Personal**: usage type → workspace name → usage purpose → template → modules → first project → complete

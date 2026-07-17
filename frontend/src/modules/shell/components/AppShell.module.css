@@ -1,0 +1,90 @@
+.shell {
+  min-height: 100vh;
+  display: flex;
+  background: var(--ds-color-bg);
+  color: var(--ds-color-text);
+  font-family: var(--ds-font-sans);
+}
+
+.skipLink {
+  position: absolute;
+  top: -48px;
+  left: 12px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-primary);
+  color: var(--ds-color-on-primary);
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: top var(--ds-transition-fast);
+}
+
+.skipLink:focus-visible {
+  top: 12px;
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.focusExit {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: var(--ds-z-drawer);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--ds-color-border-strong);
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-color-surface);
+  color: var(--ds-color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: var(--ds-shadow-md);
+  cursor: pointer;
+}
+
+.focusExit:hover {
+  color: var(--ds-color-text);
+  border-color: var(--ds-color-primary);
+}
+
+.focusExit:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.focusExitShortcut {
+  font-size: 0.72rem;
+  color: var(--ds-color-text-subtle);
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-sm);
+  padding: 1px 5px;
+}
+
+@media (max-width: 767px) {
+  .content {
+    padding: 16px;
+    padding-bottom: calc(var(--shell-bottom-nav-height) + 24px);
+  }
+
+  .shellFocus .content {
+    padding-bottom: 16px;
+  }
+}

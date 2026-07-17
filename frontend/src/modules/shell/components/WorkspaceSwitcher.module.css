@@ -1,0 +1,74 @@
+.wrapper {
+  width: 100%;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-md);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.trigger:hover {
+  background: var(--ds-color-surface-hover);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: -1px;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-primary);
+  color: var(--ds-color-on-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.details {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ds-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--ds-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--ds-color-text-subtle);
+}
+
+.collapsedTrigger {
+  justify-content: center;
+  padding: 6px;
+}
