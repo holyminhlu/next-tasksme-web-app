@@ -40,6 +40,7 @@ const authRateLimit = rateLimit({
   max: env.AUTH_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => env.isTest,
   message: {
     success: false,
     error: {

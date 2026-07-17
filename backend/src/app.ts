@@ -59,6 +59,7 @@ export function createApp() {
       max: env.RATE_LIMIT_MAX,
       standardHeaders: true,
       legacyHeaders: false,
+      skip: () => env.isTest,
     }),
   );
 
