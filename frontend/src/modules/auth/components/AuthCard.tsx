@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 import styles from "../auth.module.css";
 
 type AuthCardProps = {
@@ -12,9 +13,7 @@ export function AuthCard({ title, description, children, footer }: AuthCardProps
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
-        <div>
-          <p className={styles.eyebrow}>TaskMng SME</p>
-        </div>
+        <BrandLogo size="default" priority />
         <section className={styles.card}>
           <div className={styles.cardHeader}>
             <h1>{title}</h1>

@@ -38,6 +38,7 @@ jobs:
       LOG_LEVEL: silent
       RESEND_API_KEY: ""
       EMAIL_FROM: onboarding@resend.dev
+      REQUIRE_EMAIL_VERIFICATION: "true"
 
     steps:
       - name: Checkout

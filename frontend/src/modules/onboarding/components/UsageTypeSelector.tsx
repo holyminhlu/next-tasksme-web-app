@@ -2,6 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import {
+  ArrowRight,
+  BriefcaseBusiness,
+  Check,
+  UserRound,
+} from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth, type WorkspaceType } from "@/modules/auth";
 import * as onboardingService from "../onboarding.service";
 import { onboardingStepUrl } from "../steps";
@@ -53,19 +60,23 @@ export function UsageTypeSelector() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.shell}>
-        <p className={styles.eyebrow}>TaskMng SME · Thiết lập ban đầu</p>
+      <div className={styles.welcomeShell}>
+        <header className={styles.welcomeHeader}>
+          <BrandLogo size="large" priority />
+          <span className={styles.setupLabel}>Thiết lập ban đầu</span>
+        </header>
 
-        <section className={styles.card}>
-          <div className={styles.cardHeader}>
+        <main className={styles.welcomeMain}>
+          <div className={styles.welcomeIntro}>
+            <p className={styles.eyebrow}>Bắt đầu hành trình của bạn</p>
             <h1>Bạn sẽ dùng TaskMng như thế nào?</h1>
             <p>
-              Lựa chọn này giúp chúng tôi thiết lập không gian làm việc phù hợp
-              với bạn.
+              Chọn cách phù hợp nhất. Bạn luôn có thể tạo thêm không gian làm
+              việc khác sau này.
             </p>
           </div>
 
-          <form className={styles.form} onSubmit={handleSubmit}>
+          <form className={styles.welcomeForm} onSubmit={handleSubmit}>
             {error && <div className={styles.error}>{error}</div>}
 
             <div
@@ -82,12 +93,17 @@ export function UsageTypeSelector() {
                 }`}
                 onClick={() => setType("PERSONAL")}
               >
-                <span className={styles.usageTypeIcon} aria-hidden>
-                  👤
+                <span className={styles.usageTypeIcon} aria-hidden="true">
+                  <UserRound size={30} />
                 </span>
-                <strong>Sử dụng cá nhân</strong>
-                <span>
-                  Quản lý công việc, dự án và mục tiêu của riêng bạn.
+                <div>
+                  <strong>Sử dụng cá nhân</strong>
+                  <span>
+                    Công việc cá nhân, học tập, freelance hoặc quản lý mục tiêu.
+                  </span>
+                </div>
+                <span className={styles.optionCheck}>
+                  {type === "PERSONAL" && <Check size={16} />}
                 </span>
               </button>
 
@@ -100,12 +116,17 @@ export function UsageTypeSelector() {
                 }`}
                 onClick={() => setType("ORGANIZATION")}
               >
-                <span className={styles.usageTypeIcon} aria-hidden>
-                  🏢
+                <span className={styles.usageTypeIcon} aria-hidden="true">
+                  <BriefcaseBusiness size={30} />
                 </span>
-                <strong>Cho công ty / đội nhóm</strong>
-                <span>
-                  Cộng tác cùng đồng nghiệp, phân quyền và quản lý thành viên.
+                <div>
+                  <strong>Nhóm hoặc doanh nghiệp</strong>
+                  <span>
+                    Cộng tác cùng đồng nghiệp, phân quyền và quản lý dự án.
+                  </span>
+                </div>
+                <span className={styles.optionCheck}>
+                  {type === "ORGANIZATION" && <Check size={16} />}
                 </span>
               </button>
             </div>
@@ -115,10 +136,16 @@ export function UsageTypeSelector() {
               className={styles.primaryButton}
               disabled={submitting}
             >
-              {submitting ? "Đang tạo không gian làm việc..." : "Tiếp tục"}
+              {submitting ? (
+                "Đang tạo không gian làm việc..."
+              ) : (
+                <>
+                  Tiếp tục <ArrowRight size={18} />
+                </>
+              )}
             </button>
           </form>
-        </section>
+        </main>
       </div>
     </div>
   );

@@ -56,9 +56,14 @@ export default function RegisterPage() {
       return;
     }
 
-    router.replace(
-      `/verify-email?email=${encodeURIComponent(email)}&registered=1`,
-    );
+    if (result.requiresEmailVerification) {
+      router.replace(
+        `/verify-email?email=${encodeURIComponent(email)}&registered=1`,
+      );
+      return;
+    }
+
+    router.replace(`/login?registered=1&email=${encodeURIComponent(email)}`);
   }
 
   return (

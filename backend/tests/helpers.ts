@@ -50,6 +50,10 @@ export async function verifyLatestEmail(email: string) {
     throw new Error("User not found");
   }
 
+  if (user.status === "ACTIVE" && user.emailVerifiedAt) {
+    return user;
+  }
+
   await prisma.user.update({
     where: { id: user.id },
     data: {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { AuthGate, Can, useAuth } from "@/modules/auth";
 import {
   isOnboardingIncomplete,
@@ -40,7 +41,9 @@ function AppHeader() {
   return (
     <header className={styles.appHeader}>
       <div className={styles.appNav}>
-        <div className={styles.appBrand}>TaskMng SME</div>
+        <Link href="/dashboard" aria-label="Task SME dashboard">
+          <BrandLogo size="compact" priority />
+        </Link>
         <Link href="/dashboard">Dashboard</Link>
         {isOrganization && (
           <Can permission="members:read">

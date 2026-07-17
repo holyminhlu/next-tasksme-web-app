@@ -78,9 +78,11 @@ export class AuthService {
     }
 
     const passwordHash = await hashPassword(input.password);
-    const verificationToken = generateOpaqueToken();
-    const verificationHash = hashToken(verificationToken);
     const env = getEnv();
+    const requireVerification = env.REQUIRE_EMAIL_VERIFICATION;
+    const verificationToken = requireVerification
+      ? generateOpaqueToken()
+      : null;
 
     const user = await prisma.$transaction(async (tx) => {
       await ensurePermissionCatalog(tx);
@@ -90,35 +92,41 @@ export class AuthService {
           email: input.email,
           passwordHash,
           fullName: input.fullName,
-          status: "PENDING_VERIFICATION",
+          status: requireVerification ? "PENDING_VERIFICATION" : "ACTIVE",
+          emailVerifiedAt: requireVerification ? null : new Date(),
         },
       });
 
-      await tx.oneTimeToken.create({
-        data: {
-          userId: created.id,
-          type: "EMAIL_VERIFICATION",
-          tokenHash: verificationHash,
-          expiresAt: addHours(env.EMAIL_VERIFICATION_TTL_HOURS),
-        },
-      });
+      if (requireVerification && verificationToken) {
+        await tx.oneTimeToken.create({
+          data: {
+            userId: created.id,
+            type: "EMAIL_VERIFICATION",
+            tokenHash: hashToken(verificationToken),
+            expiresAt: addHours(env.EMAIL_VERIFICATION_TTL_HOURS),
+          },
+        });
+      }
 
       return created;
     });
 
-    const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
-    await getEmailService().send({
-      to: user.email,
-      subject: "Verify your TaskMng email",
-      text: `Verify your email: ${verifyUrl}`,
-      html: `<p>Welcome to TaskMng.</p><p><a href="${verifyUrl}">Verify your email</a></p>`,
-    });
+    if (requireVerification && verificationToken) {
+      const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+      await getEmailService().send({
+        to: user.email,
+        subject: "Verify your TaskMng email",
+        text: `Verify your email: ${verifyUrl}`,
+        html: `<p>Welcome to TaskMng.</p><p><a href="${verifyUrl}">Verify your email</a></p>`,
+      });
+    }
 
     await writeAuditLog({
       action: "auth.register",
       userId: user.id,
       entityType: "user",
       entityId: user.id,
+      metadata: { requireEmailVerification: requireVerification },
       ...getClientMeta(req),
     });
 
@@ -129,7 +137,7 @@ export class AuthService {
         fullName: user.fullName,
         status: user.status,
       },
-      requiresEmailVerification: true,
+      requiresEmailVerification: requireVerification,
     };
   }
 
@@ -176,12 +184,17 @@ export class AuthService {
   }
 
   async resendVerification(input: ResendVerificationInput, req: Request) {
+    const env = getEnv();
+
+    if (!env.REQUIRE_EMAIL_VERIFICATION) {
+      return { message: GENERIC_EMAIL_SENT };
+    }
+
     const user = await prisma.user.findUnique({
       where: { email: input.email },
     });
 
     if (user && user.status === "PENDING_VERIFICATION" && !user.deletedAt) {
-      const env = getEnv();
       const token = generateOpaqueToken();
 
       await prisma.oneTimeToken.updateMany({
@@ -252,7 +265,18 @@ export class AuthService {
     }
 
     if (user.status === "PENDING_VERIFICATION") {
-      throw new ForbiddenError("Email verification is required");
+      if (env.REQUIRE_EMAIL_VERIFICATION) {
+        throw new ForbiddenError("Email verification is required");
+      }
+
+      // Verification temporarily disabled: activate leftover pending accounts on login.
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          status: "ACTIVE",
+          emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+        },
+      });
     }
 
     if (user.status === "LOCKED") {
