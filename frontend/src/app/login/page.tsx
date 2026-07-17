@@ -16,10 +16,15 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, status } = useAuth();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message] = useState(() =>
+    searchParams.get("registered") === "1"
+      ? "Account created. You can sign in now."
+      : null,
+  );
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -57,6 +62,7 @@ function LoginForm() {
     >
       <form className={styles.form} onSubmit={handleSubmit}>
         <FormError message={error} />
+        {message && <div className={styles.success}>{message}</div>}
 
         <div className={styles.field}>
           <label htmlFor="email">Email</label>

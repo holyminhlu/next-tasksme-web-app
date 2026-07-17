@@ -136,10 +136,12 @@ Backend highlights:
 - Module presets + optional module toggles (`modules:manage`)
 - First Project/Task always scoped by `workspaceId`
 - Personal → SME bằng cách tạo Workspace ORGANIZATION mới
+- Email verification tạm tắt: `REQUIRE_EMAIL_VERIFICATION=false` (đăng ký xong đăng nhập ngay). Bật lại khi có domain Resend.
 
-Set Resend credentials in `backend/.env`:
+Set Resend credentials in `backend/.env` (khi bật verify email):
 
 ```env
+REQUIRE_EMAIL_VERIFICATION=true
 RESEND_API_KEY=your_resend_api_key
 EMAIL_FROM=you@your-verified-domain.com
 FRONTEND_URL=http://localhost:3000

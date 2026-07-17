@@ -53,6 +53,8 @@ const envSchema = z.object({
   EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
   PASSWORD_RESET_TTL_HOURS: z.coerce.number().int().positive().default(1),
   INVITATION_TTL_HOURS: z.coerce.number().int().positive().default(72),
+  // false: register activates users immediately (use until custom domain email is ready)
+  REQUIRE_EMAIL_VERIFICATION: booleanFromEnv.default(false),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().email().default("onboarding@resend.dev"),
   LOG_LEVEL: z
@@ -85,9 +87,13 @@ export function loadEnv(overrides?: Record<string, string | undefined>): Env {
 
   const data = parsed.data;
 
-  if (data.NODE_ENV === "production" && !data.RESEND_API_KEY) {
+  if (
+    data.NODE_ENV === "production" &&
+    data.REQUIRE_EMAIL_VERIFICATION &&
+    !data.RESEND_API_KEY
+  ) {
     throw new Error(
-      "Invalid environment configuration: RESEND_API_KEY is required in production",
+      "Invalid environment configuration: RESEND_API_KEY is required in production when REQUIRE_EMAIL_VERIFICATION=true",
     );
   }
 
