@@ -5,10 +5,14 @@ import { getEnv } from "../config/env.js";
 export type AccessTokenPayload = {
   sub: string;
   email: string;
+  sid: string;
+  authVersion: number;
   type: "access";
 };
 
-export function signAccessToken(payload: Omit<AccessTokenPayload, "type">): string {
+export function signAccessToken(
+  payload: Omit<AccessTokenPayload, "type">,
+): string {
   const env = getEnv();
   return jwt.sign(
     {
@@ -26,14 +30,20 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
   const env = getEnv();
   const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as AccessTokenPayload;
 
-  if (payload.type !== "access" || !payload.sub || !payload.email) {
+  if (
+    payload.type !== "access" ||
+    !payload.sub ||
+    !payload.email ||
+    !payload.sid ||
+    typeof payload.authVersion !== "number"
+  ) {
     throw new Error("Invalid access token");
   }
 
   return payload;
 }
 
-export function generateRefreshToken(): string {
+export function generateOpaqueToken(): string {
   return crypto.randomBytes(48).toString("base64url");
 }
 
