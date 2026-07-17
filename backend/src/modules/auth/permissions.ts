@@ -1,39 +1,67 @@
 export const PERMISSIONS = [
   {
-    key: "company:read",
-    description: "View company profile",
+    key: "workspace:read",
+    description: "View workspace profile",
   },
   {
-    key: "company:update",
-    description: "Update company profile",
+    key: "workspace:update",
+    description: "Update workspace profile",
   },
   {
     key: "members:read",
-    description: "View company members",
+    description: "View workspace members",
   },
   {
     key: "members:invite",
-    description: "Invite company members",
+    description: "Invite workspace members",
   },
   {
     key: "members:update",
-    description: "Update company member roles",
+    description: "Update workspace member roles",
   },
   {
     key: "members:remove",
-    description: "Remove company members",
+    description: "Remove workspace members",
   },
   {
     key: "ownership:transfer",
-    description: "Transfer company ownership",
+    description: "Transfer workspace ownership",
   },
   {
     key: "roles:read",
-    description: "View company roles",
+    description: "View workspace roles",
   },
   {
     key: "roles:manage",
-    description: "Manage company roles and permissions",
+    description: "Manage workspace roles and permissions",
+  },
+  {
+    key: "modules:manage",
+    description: "Manage workspace modules",
+  },
+  {
+    key: "projects:read",
+    description: "View projects",
+  },
+  {
+    key: "projects:create",
+    description: "Create projects",
+  },
+  {
+    key: "projects:update",
+    description: "Update projects",
+  },
+  {
+    key: "tasks:read",
+    description: "View tasks",
+  },
+  {
+    key: "tasks:create",
+    description: "Create tasks",
+  },
+  {
+    key: "tasks:update",
+    description: "Update tasks",
   },
 ] as const;
 
@@ -46,23 +74,44 @@ export type SystemRoleKey = (typeof SYSTEM_ROLE_KEYS)[number];
 export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
   owner: PERMISSIONS.map((permission) => permission.key),
   admin: [
-    "company:read",
-    "company:update",
+    "workspace:read",
+    "workspace:update",
     "members:read",
     "members:invite",
     "members:update",
     "members:remove",
     "roles:read",
     "roles:manage",
+    "modules:manage",
+    "projects:read",
+    "projects:create",
+    "projects:update",
+    "tasks:read",
+    "tasks:create",
+    "tasks:update",
   ],
   manager: [
-    "company:read",
+    "workspace:read",
     "members:read",
     "members:invite",
     "members:update",
     "roles:read",
+    "projects:read",
+    "projects:create",
+    "projects:update",
+    "tasks:read",
+    "tasks:create",
+    "tasks:update",
   ],
-  member: ["company:read", "members:read", "roles:read"],
+  member: [
+    "workspace:read",
+    "members:read",
+    "roles:read",
+    "projects:read",
+    "tasks:read",
+    "tasks:create",
+    "tasks:update",
+  ],
 };
 
 export const INVITABLE_ROLE_KEYS: SystemRoleKey[] = [

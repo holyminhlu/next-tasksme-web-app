@@ -8,7 +8,7 @@ import type {
   RegisterInput,
   ResendVerificationInput,
   ResetPasswordInput,
-  SelectCompanyInput,
+  SelectWorkspaceInput,
   VerifyEmailInput,
 } from "./auth.schemas.js";
 import { getRefreshCookieOptions } from "./auth.helpers.js";
@@ -216,7 +216,7 @@ export async function me(
   }
 }
 
-export async function listCompanies(
+export async function listWorkspaces(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -226,14 +226,14 @@ export async function listCompanies(
       throw new UnauthorizedError();
     }
 
-    const companies = await authService.listCompanies(req.user.id);
-    sendSuccess(res, companies);
+    const workspaces = await authService.listWorkspaces(req.user.id);
+    sendSuccess(res, workspaces);
   } catch (error) {
     next(error);
   }
 }
 
-export async function selectCompany(
+export async function selectWorkspace(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -243,12 +243,12 @@ export async function selectCompany(
       throw new UnauthorizedError();
     }
 
-    const company = await authService.selectCompany(
+    const workspace = await authService.selectWorkspace(
       req.user.id,
-      req.body as SelectCompanyInput,
+      req.body as SelectWorkspaceInput,
       req,
     );
-    sendSuccess(res, company);
+    sendSuccess(res, workspace);
   } catch (error) {
     next(error);
   }

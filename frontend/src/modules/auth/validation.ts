@@ -1,9 +1,9 @@
 export type RegisterFormInput = {
   fullName: string;
   email: string;
-  companyName: string;
   password: string;
   confirmPassword: string;
+  acceptTerms: boolean;
 };
 
 export type ResetPasswordFormInput = {
@@ -36,10 +36,6 @@ export function validateRegisterForm(input: RegisterFormInput): string | null {
     return "Enter a valid email address";
   }
 
-  if (input.companyName.trim().length < 2) {
-    return "Company name must be at least 2 characters";
-  }
-
   const passwordError = validatePasswordStrength(input.password);
   if (passwordError) {
     return passwordError;
@@ -47,6 +43,10 @@ export function validateRegisterForm(input: RegisterFormInput): string | null {
 
   if (!passwordsMatch(input.password, input.confirmPassword)) {
     return "Passwords do not match";
+  }
+
+  if (!input.acceptTerms) {
+    return "You must accept the Terms of Service to continue";
   }
 
   return null;

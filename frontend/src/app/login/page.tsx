@@ -7,6 +7,7 @@ import {
   AuthCard,
   FormError,
   PasswordField,
+  SocialAuthPlaceholder,
   useAuth,
 } from "@/modules/auth";
 import styles from "@/modules/auth/auth.module.css";
@@ -98,6 +99,8 @@ function LoginForm() {
         <p className={styles.footer}>
           <Link href="/forgot-password">Forgot password?</Link>
         </p>
+
+        <SocialAuthPlaceholder mode="login" />
       </form>
     </AuthCard>
   );

@@ -14,12 +14,36 @@ describe("auth form validation", () => {
     const error = validateRegisterForm({
       fullName: "Owner User",
       email: "owner@example.com",
-      companyName: "Acme",
       password: "Password123",
       confirmPassword: "Password124",
+      acceptTerms: true,
     });
 
     expect(error).toBe("Passwords do not match");
+  });
+
+  it("requires terms acceptance", () => {
+    const error = validateRegisterForm({
+      fullName: "Owner User",
+      email: "owner@example.com",
+      password: "Password123",
+      confirmPassword: "Password123",
+      acceptTerms: false,
+    });
+
+    expect(error).toBe("You must accept the Terms of Service to continue");
+  });
+
+  it("rejects short full names", () => {
+    const error = validateRegisterForm({
+      fullName: "O",
+      email: "owner@example.com",
+      password: "Password123",
+      confirmPassword: "Password123",
+      acceptTerms: true,
+    });
+
+    expect(error).toBe("Full name must be at least 2 characters");
   });
 
   it("rejects short passwords on reset", () => {
@@ -31,13 +55,13 @@ describe("auth form validation", () => {
     expect(error).toBe("Password must be at least 8 characters");
   });
 
-  it("accepts a valid register payload", () => {
+  it("accepts a valid minimal register payload", () => {
     const error = validateRegisterForm({
       fullName: "Owner User",
       email: "owner@example.com",
-      companyName: "Acme SME",
       password: "Password123",
       confirmPassword: "Password123",
+      acceptTerms: true,
     });
 
     expect(error).toBeNull();

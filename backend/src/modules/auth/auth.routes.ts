@@ -7,7 +7,7 @@ import { validateRequest } from "../../middleware/validate.js";
 import {
   changePassword,
   forgotPassword,
-  listCompanies,
+  listWorkspaces,
   listSessions,
   login,
   logout,
@@ -18,7 +18,7 @@ import {
   resendVerification,
   resetPassword,
   revokeSession,
-  selectCompany,
+  selectWorkspace,
   verifyEmail,
 } from "./auth.controller.js";
 import {
@@ -28,7 +28,7 @@ import {
   registerSchema,
   resendVerificationSchema,
   resetPasswordSchema,
-  selectCompanySchema,
+  selectWorkspaceSchema,
   sessionIdParamsSchema,
   verifyEmailSchema,
 } from "./auth.schemas.js";
@@ -115,12 +115,12 @@ authRouter.delete(
 );
 
 authRouter.post(
-  "/select-company",
+  "/select-workspace",
   authenticate,
-  validateRequest({ body: selectCompanySchema }),
-  selectCompany,
+  validateRequest({ body: selectWorkspaceSchema }),
+  selectWorkspace,
 );
 
 export const meRouter = Router();
 meRouter.use(authenticate);
-meRouter.get("/companies", listCompanies);
+meRouter.get("/workspaces", listWorkspaces);

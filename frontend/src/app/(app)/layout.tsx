@@ -3,19 +3,33 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense } from "react";
-import { AuthGate, useAuth } from "@/modules/auth";
+import { AuthGate, Can, useAuth } from "@/modules/auth";
+import {
+  isOnboardingIncomplete,
+  resumeOnboardingUrl,
+} from "@/modules/onboarding/routing";
 import styles from "@/modules/auth/auth.module.css";
 
 function AppHeader() {
   const router = useRouter();
-  const { user, companies, selectedCompany, selectCompany, logout } = useAuth();
+  const { user, workspaces, selectedWorkspace, selectWorkspace, logout } =
+    useAuth();
 
-  async function handleCompanyChange(companyId: string) {
-    if (!companyId) {
+  const isOrganization = selectedWorkspace?.type === "ORGANIZATION";
+
+  async function handleWorkspaceChange(workspaceId: string) {
+    if (!workspaceId || workspaceId === selectedWorkspace?.id) {
       return;
     }
 
-    await selectCompany(companyId);
+    const result = await selectWorkspace(workspaceId);
+
+    if (result.ok) {
+      const next = workspaces.find((workspace) => workspace.id === workspaceId);
+      if (next && isOnboardingIncomplete(next)) {
+        router.replace(resumeOnboardingUrl(next));
+      }
+    }
   }
 
   async function handleLogout() {
@@ -25,28 +39,37 @@ function AppHeader() {
 
   return (
     <header className={styles.appHeader}>
-      <div className={styles.appBrand}>TaskMng SME</div>
+      <div className={styles.appNav}>
+        <div className={styles.appBrand}>TaskMng SME</div>
+        <Link href="/dashboard">Dashboard</Link>
+        {isOrganization && (
+          <Can permission="members:read">
+            <Link href="/members">Members</Link>
+          </Can>
+        )}
+      </div>
       <div className={styles.appActions}>
-        {companies.length > 0 && (
+        {workspaces.length > 0 && (
           <select
-            className={styles.companySelect}
-            value={selectedCompany?.id ?? ""}
-            onChange={(event) => handleCompanyChange(event.target.value)}
-            aria-label="Active company"
+            className={styles.workspaceSelect}
+            value={selectedWorkspace?.id ?? ""}
+            onChange={(event) => handleWorkspaceChange(event.target.value)}
+            aria-label="Active workspace"
           >
             <option value="" disabled>
-              Select company
+              Select workspace
             </option>
-            {companies.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
+            {workspaces.map((workspace) => (
+              <option key={workspace.id} value={workspace.id}>
+                {workspace.name}
+                {workspace.type === "PERSONAL" ? " (personal)" : ""}
               </option>
             ))}
           </select>
         )}
-        {companies.length > 1 && (
-          <Link href="/select-company" className={styles.secondaryButton}>
-            Switch company
+        {workspaces.length > 1 && (
+          <Link href="/select-workspace" className={styles.secondaryButton}>
+            Switch workspace
           </Link>
         )}
         <span className={styles.muted}>{user?.email}</span>
@@ -74,7 +97,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={<div className={styles.loading}>Loading...</div>}>
-      <AuthGate requireCompany>
+      <AuthGate requireWorkspace>
         <AppLayoutContent>{children}</AppLayoutContent>
       </AuthGate>
     </Suspense>

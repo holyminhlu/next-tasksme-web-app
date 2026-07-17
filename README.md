@@ -1,6 +1,6 @@
 # next-task-sme-webapp
 
-Task Management SME — Phase 1 Authentication & Authorization.
+Task Management SME — Phase 2 Personal & Workspace Onboarding.
 
 Tech stack:
 
@@ -50,7 +50,7 @@ cd ..
 npm run dev
 ```
 
-- Frontend status page: http://localhost:3000
+- Frontend: http://localhost:3000 (redirect login/dashboard)
 - Backend: http://localhost:4000
 - Health live: http://localhost:4000/api/v1/health/live
 - Health ready: http://localhost:4000/api/v1/health/ready
@@ -66,13 +66,16 @@ backend/src/middleware/      # auth, tenant, permission, validate, errors
 backend/src/lib/             # errors, tokens, password, response
 ```
 
-## Auth model
+## Auth & Workspace model
 
-- Register tạo User + Company + system roles + Owner membership trong một transaction
-- Access token: JWT Bearer ngắn hạn
+- Register tối giản (họ tên, email, mật khẩu); không tạo Workspace tại register
+- Sau verify/login: chọn PERSONAL hoặc ORGANIZATION rồi chạy onboarding
+- Một tài khoản có thể thuộc nhiều Workspace; mỗi Workspace có Owner/membership riêng
+- Access token: JWT Bearer ngắn hạn, chỉ giữ trong memory trên frontend
 - Refresh token: opaque, hash trong DB, HttpOnly cookie, rotation + reuse detection
-- Roles theo company: Owner / Admin / Manager / Member
-- Permission catalog seed toàn cục
+- `lastActiveWorkspaceId` được lưu khi chọn Workspace
+- Invitation chỉ cho Workspace ORGANIZATION; invited user không bị buộc tạo Workspace mới
+- Roles theo workspace: Owner / Admin / Manager / Member
 
 ## Migration production
 
@@ -109,25 +112,30 @@ trong network nội bộ Compose.
 
 ## Postman
 
-`postman/TaskMng-Phase1.postman_collection.json`
+`postman/TaskMng-Phase2.postman_collection.json`
 
-## Phase 1 Authentication
+## Phase 2 Onboarding
 
-Auth UI routes:
+UI routes:
 
-- `/register`, `/login`, `/verify-email`
-- `/forgot-password`, `/reset-password`
-- `/select-company`, `/invite/[token]`
+- `/register`, `/login`, `/verify-email`, `/forgot-password`, `/reset-password`
+- `/onboarding`, `/onboarding/[step]`
+- `/select-workspace`, `/invite/[token]`
+- `/dashboard`, `/members`
 - `/session-expired`, `/forbidden`
-- Protected app shell: `/dashboard`
 
-Backend auth highlights:
+Flows:
 
-- Email verification via Resend (or console transport when `RESEND_API_KEY` is empty)
-- Access JWT in memory + HttpOnly refresh cookie with rotation/reuse detection
-- Remember me, logout-all, session list/revoke
-- Password reset/change revokes sessions and bumps authVersion
-- Company invitations + Owner safety rules
+- **Personal**: usage type → workspace name → usage purpose → template → modules → first project → complete
+- **Organization**: usage type → workspace profile → modules → template → first project → invite → complete
+- **Invited member**: accept invite → profile/role intro → complete (no create-workspace/module setup)
+
+Backend highlights:
+
+- `Company` renamed to `Workspace` (IDs preserved; existing rows = `ORGANIZATION`)
+- Module presets + optional module toggles (`modules:manage`)
+- First Project/Task always scoped by `workspaceId`
+- Personal → SME bằng cách tạo Workspace ORGANIZATION mới
 
 Set Resend credentials in `backend/.env`:
 

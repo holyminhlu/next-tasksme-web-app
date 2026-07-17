@@ -11,17 +11,25 @@ export type AuthUser = {
   status: UserStatus;
 };
 
-export type CompanySummary = {
+export type WorkspaceType = "PERSONAL" | "ORGANIZATION";
+
+export type OnboardingStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+
+export type WorkspaceSummary = {
   id: string;
   name: string;
   slug: string;
+  type: WorkspaceType;
   roleKey: string;
   membershipId: string;
+  onboardingStatus: OnboardingStatus | null;
+  currentStep: string | null;
 };
 
 export type AuthProfile = AuthUser & {
   emailVerifiedAt: string | null;
-  companies: CompanySummary[];
+  lastActiveWorkspaceId: string | null;
+  workspaces: WorkspaceSummary[];
 };
 
 export type AuthSession = {
@@ -48,7 +56,6 @@ export type RegisterInput = {
   password: string;
   confirmPassword: string;
   fullName: string;
-  companyName: string;
 };
 
 export type VerifyEmailInput = {
@@ -75,8 +82,8 @@ export type ChangePasswordInput = {
   confirmPassword: string;
 };
 
-export type SelectCompanyInput = {
-  companyId: string;
+export type SelectWorkspaceInput = {
+  workspaceId: string;
 };
 
 export type LoginResponse = {
@@ -86,20 +93,16 @@ export type LoginResponse = {
 
 export type RegisterResponse = {
   user: AuthUser;
-  company: {
-    id: string;
-    name: string;
-    slug: string;
-  };
   requiresEmailVerification: boolean;
 };
 
 export type InvitationPreview = {
   email: string;
-  company: {
+  workspace: {
     id: string;
     name: string;
     slug: string;
+    type: WorkspaceType;
   };
   roleKey: string;
   expiresAt: string;
@@ -113,9 +116,17 @@ export type AcceptInvitationInput = {
 };
 
 export type AcceptInvitationResponse = {
-  companyId: string;
+  workspaceId: string;
   roleKey: string;
   userId: string;
+};
+
+export type WorkspaceMemberSummary = {
+  id: string;
+  status: string;
+  user: AuthUser;
+  role: { id: string; key: string; name?: string };
+  createdAt: string;
 };
 
 export type AuthStatus =
@@ -125,12 +136,19 @@ export type AuthStatus =
   | "session-expired";
 
 export type PermissionKey =
-  | "company:read"
-  | "company:update"
+  | "workspace:read"
+  | "workspace:update"
   | "members:read"
   | "members:invite"
   | "members:update"
   | "members:remove"
   | "ownership:transfer"
   | "roles:read"
-  | "roles:manage";
+  | "roles:manage"
+  | "modules:manage"
+  | "projects:read"
+  | "projects:create"
+  | "projects:update"
+  | "tasks:read"
+  | "tasks:create"
+  | "tasks:update";

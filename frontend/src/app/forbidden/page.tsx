@@ -17,7 +17,7 @@ export default function ForbiddenPage() {
       }
     >
       <p className={styles.muted}>
-        Contact your company administrator if you believe this is a mistake.
+        Contact your workspace administrator if you believe this is a mistake.
       </p>
     </AuthCard>
   );

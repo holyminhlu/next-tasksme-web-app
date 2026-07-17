@@ -14,9 +14,14 @@ enum UserStatus {
   DISABLED
 }
 
-enum CompanyStatus {
+enum WorkspaceStatus {
   ACTIVE
   SUSPENDED
+}
+
+enum WorkspaceType {
+  PERSONAL
+  ORGANIZATION
 }
 
 enum MembershipStatus {
@@ -37,56 +42,99 @@ enum OneTimeTokenType {
   PASSWORD_RESET
 }
 
-model User {
-  id                 String     @id @default(uuid()) @db.Uuid
-  email              String     @unique
-  passwordHash       String
-  fullName           String
-  status             UserStatus @default(PENDING_VERIFICATION)
-  emailVerifiedAt    DateTime?
-  lastLoginAt        DateTime?
-  passwordChangedAt  DateTime?
-  authVersion        Int        @default(0)
-  failedLoginAttempts Int       @default(0)
-  lockedUntil        DateTime?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
-  deletedAt          DateTime?
+enum OnboardingType {
+  PERSONAL_OWNER
+  ORGANIZATION_OWNER
+  INVITED_MEMBER
+  INVITED_MANAGER
+}
 
-  memberships      CompanyMember[]
-  refreshSessions  RefreshSession[]
-  ownedCompanies   Company[]         @relation("CompanyOwner")
-  oneTimeTokens    OneTimeToken[]
-  invitationsSent  CompanyInvitation[] @relation("InvitationInviter")
-  auditLogs        AuditLog[]
+enum OnboardingStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model User {
+  id                    String     @id @default(uuid()) @db.Uuid
+  email                 String     @unique
+  passwordHash          String
+  fullName              String
+  status                UserStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt       DateTime?
+  lastLoginAt           DateTime?
+  passwordChangedAt     DateTime?
+  authVersion           Int        @default(0)
+  failedLoginAttempts   Int        @default(0)
+  lockedUntil           DateTime?
+  lastActiveWorkspaceId String?    @db.Uuid
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  deletedAt             DateTime?
+
+  memberships         WorkspaceMember[]
+  refreshSessions     RefreshSession[]
+  ownedWorkspaces     Workspace[]           @relation("WorkspaceOwner")
+  oneTimeTokens       OneTimeToken[]
+  invitationsSent     WorkspaceInvitation[] @relation("InvitationInviter")
+  auditLogs           AuditLog[]
+  onboardings         WorkspaceOnboarding[]
+  lastActiveWorkspace Workspace?            @relation("UserLastActiveWorkspace", fields: [lastActiveWorkspaceId], references: [id], onDelete: SetNull)
 
   @@index([status])
+  @@index([lastActiveWorkspaceId])
   @@map("users")
 }
 
-model Company {
-  id        String        @id @default(uuid()) @db.Uuid
-  name      String
-  slug      String        @unique
-  status    CompanyStatus @default(ACTIVE)
-  ownerId   String        @db.Uuid
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  deletedAt DateTime?
+model Workspace {
+  id           String          @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String          @unique
+  type         WorkspaceType   @default(ORGANIZATION)
+  status       WorkspaceStatus @default(ACTIVE)
+  ownerId      String          @db.Uuid
+  industryCode String?
+  usagePurpose String?
+  companySize  String?
+  timezone     String          @default("UTC")
+  locale       String          @default("vi")
+  logoUrl      String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  deletedAt    DateTime?
 
-  owner       User                @relation("CompanyOwner", fields: [ownerId], references: [id])
-  members     CompanyMember[]
-  roles       Role[]
-  invitations CompanyInvitation[]
+  owner           User                  @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members         WorkspaceMember[]
+  roles           Role[]
+  invitations     WorkspaceInvitation[]
+  onboardings     WorkspaceOnboarding[]
+  modules         WorkspaceModule[]
+  projects        Project[]
+  tasks           Task[]
+  lastActiveUsers User[]                @relation("UserLastActiveWorkspace")
 
   @@index([ownerId])
   @@index([status])
-  @@map("companies")
+  @@index([type])
+  @@map("workspaces")
 }
 
 model Role {
   id          String   @id @default(uuid()) @db.Uuid
-  companyId   String   @db.Uuid
+  workspaceId String   @db.Uuid
   key         String
   name        String
   description String?
@@ -94,14 +142,14 @@ model Role {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  members         CompanyMember[]
+  workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members         WorkspaceMember[]
   rolePermissions RolePermission[]
-  invitations     CompanyInvitation[]
+  invitations     WorkspaceInvitation[]
 
-  @@unique([companyId, key])
-  @@unique([id, companyId])
-  @@index([companyId])
+  @@unique([workspaceId, key])
+  @@unique([id, workspaceId])
+  @@index([workspaceId])
   @@map("roles")
 }
 
@@ -129,25 +177,25 @@ model RolePermission {
   @@map("role_permissions")
 }
 
-model CompanyMember {
-  id        String           @id @default(uuid()) @db.Uuid
-  companyId String           @db.Uuid
-  userId    String           @db.Uuid
-  roleId    String           @db.Uuid
-  status    MembershipStatus @default(ACTIVE)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  deletedAt DateTime?
+model WorkspaceMember {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @db.Uuid
+  userId      String           @db.Uuid
+  roleId      String           @db.Uuid
+  status      MembershipStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role    Role    @relation(fields: [roleId, companyId], references: [id, companyId])
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId, workspaceId], references: [id, workspaceId])
 
-  @@unique([companyId, userId])
+  @@unique([workspaceId, userId])
   @@index([userId])
   @@index([roleId])
-  @@index([companyId, status])
-  @@map("company_members")
+  @@index([workspaceId, status])
+  @@map("workspace_members")
 }
 
 model RefreshSession {
@@ -192,9 +240,9 @@ model OneTimeToken {
   @@map("one_time_tokens")
 }
 
-model CompanyInvitation {
+model WorkspaceInvitation {
   id          String           @id @default(uuid()) @db.Uuid
-  companyId   String           @db.Uuid
+  workspaceId String           @db.Uuid
   email       String
   roleId      String           @db.Uuid
   tokenHash   String           @unique
@@ -206,34 +254,114 @@ model CompanyInvitation {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  role      Role    @relation(fields: [roleId, companyId], references: [id, companyId])
-  invitedBy User    @relation("InvitationInviter", fields: [invitedById], references: [id])
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId, workspaceId], references: [id, workspaceId])
+  invitedBy User      @relation("InvitationInviter", fields: [invitedById], references: [id])
 
-  @@index([companyId, email])
+  @@index([workspaceId, email])
   @@index([status])
   @@index([expiresAt])
-  @@map("company_invitations")
+  @@map("workspace_invitations")
 }
 
 model AuditLog {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String?  @db.Uuid
-  companyId  String?  @db.Uuid
-  action     String
-  entityType String?
-  entityId   String?
-  metadata   Json?
-  ipAddress  String?
-  userAgent  String?
-  requestId  String?
-  createdAt  DateTime @default(now())
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String?  @db.Uuid
+  workspaceId String?  @db.Uuid
+  action      String
+  entityType  String?
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  requestId   String?
+  createdAt   DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
-  @@index([companyId])
+  @@index([workspaceId])
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model WorkspaceOnboarding {
+  id             String           @id @default(uuid()) @db.Uuid
+  workspaceId    String           @db.Uuid
+  userId         String           @db.Uuid
+  onboardingType OnboardingType
+  status         OnboardingStatus @default(IN_PROGRESS)
+  currentStep    String
+  completedSteps Json             @default("[]")
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([status])
+  @@map("workspace_onboardings")
+}
+
+model WorkspaceModule {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  moduleKey   String
+  enabled     Boolean  @default(true)
+  core        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, moduleKey])
+  @@index([workspaceId])
+  @@map("workspace_modules")
+}
+
+model Project {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  name        String
+  description String?
+  status      String    @default("ACTIVE")
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+
+  @@index([workspaceId])
+  @@index([createdById])
+  @@map("projects")
+}
+
+model Task {
+  id          String       @id @default(uuid()) @db.Uuid
+  workspaceId String       @db.Uuid
+  projectId   String?      @db.Uuid
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+  createdById String?      @db.Uuid
+  assigneeId  String?      @db.Uuid
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([assigneeId])
+  @@map("tasks")
 }

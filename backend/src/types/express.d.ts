@@ -13,7 +13,7 @@ declare global {
         authVersion: number;
       };
       tenant?: {
-        companyId: string;
+        workspaceId: string;
         membershipId: string;
         roleId: string;
         roleKey: string;

@@ -7,7 +7,16 @@ type RegisterOverrides = Partial<{
   email: string;
   password: string;
   fullName: string;
-  companyName: string;
+}>;
+
+type WorkspaceOverrides = Partial<{
+  type: "PERSONAL" | "ORGANIZATION";
+  name: string;
+  usagePurpose: string;
+  industryCode: string;
+  companySize: string;
+  timezone: string;
+  locale: string;
 }>;
 
 export function buildApp() {
@@ -23,7 +32,6 @@ export async function registerUser(
     password: overrides.password ?? "Password123",
     confirmPassword: overrides.password ?? "Password123",
     fullName: overrides.fullName ?? "Test User",
-    companyName: overrides.companyName ?? `Company ${Date.now()}`,
   };
 
   const response = await request(app).post("/api/v1/auth/register").send(payload);
@@ -32,7 +40,6 @@ export async function registerUser(
     app,
     payload,
     response,
-    companyId: response.body.data?.company?.id as string | undefined,
     userId: response.body.data?.user?.id as string | undefined,
   };
 }
@@ -85,5 +92,57 @@ export async function registerAndLogin(
     cookies: loginResponse.headers["set-cookie"] as unknown as
       | string[]
       | undefined,
+  };
+}
+
+export async function createWorkspace(
+  accessToken: string,
+  overrides: WorkspaceOverrides = {},
+  app: Express = buildApp(),
+) {
+  const payload = {
+    type: overrides.type ?? "ORGANIZATION",
+    name: overrides.name ?? `Workspace ${Date.now()}`,
+    usagePurpose: overrides.usagePurpose,
+    industryCode: overrides.industryCode,
+    companySize: overrides.companySize,
+    timezone: overrides.timezone,
+    locale: overrides.locale,
+  };
+
+  const response = await request(app)
+    .post("/api/v1/workspaces")
+    .set("Authorization", `Bearer ${accessToken}`)
+    .send(payload);
+
+  return {
+    response,
+    workspaceId: response.body.data?.id as string | undefined,
+    payload,
+  };
+}
+
+export async function registerLoginAndCreateWorkspace(
+  overrides: RegisterOverrides & WorkspaceOverrides = {},
+  app: Express = buildApp(),
+) {
+  const session = await registerAndLogin(overrides, app);
+  const workspace = await createWorkspace(
+    session.accessToken!,
+    {
+      type: overrides.type,
+      name: overrides.name,
+      usagePurpose: overrides.usagePurpose,
+      industryCode: overrides.industryCode,
+      companySize: overrides.companySize,
+      timezone: overrides.timezone,
+      locale: overrides.locale,
+    },
+    session.app,
+  );
+
+  return {
+    ...session,
+    ...workspace,
   };
 }

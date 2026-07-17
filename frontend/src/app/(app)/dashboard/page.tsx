@@ -5,7 +5,8 @@ import { Can, useAuth } from "@/modules/auth";
 import styles from "@/modules/auth/auth.module.css";
 
 export default function DashboardPage() {
-  const { user, profile, companies, selectedCompany, permissions } = useAuth();
+  const { user, profile, workspaces, selectedWorkspace, permissions } =
+    useAuth();
 
   return (
     <div className={styles.card}>
@@ -26,23 +27,23 @@ export default function DashboardPage() {
         </div>
 
         <div>
-          <span className={styles.muted}>Active company</span>
+          <span className={styles.muted}>Active workspace</span>
           <p>
-            {selectedCompany
-              ? `${selectedCompany.name} (${selectedCompany.roleKey})`
+            {selectedWorkspace
+              ? `${selectedWorkspace.name} (${selectedWorkspace.type === "PERSONAL" ? "personal" : "organization"} · ${selectedWorkspace.roleKey})`
               : "None selected"}
           </p>
         </div>
 
         <div>
-          <span className={styles.muted}>Companies</span>
-          {companies.length === 0 ? (
-            <p>No companies</p>
+          <span className={styles.muted}>Workspaces</span>
+          {workspaces.length === 0 ? (
+            <p>No workspaces</p>
           ) : (
-            <ul className={styles.companyList}>
-              {companies.map((company) => (
-                <li key={company.id} className={styles.muted}>
-                  {company.name} · {company.roleKey}
+            <ul className={styles.workspaceList}>
+              {workspaces.map((workspace) => (
+                <li key={workspace.id} className={styles.muted}>
+                  {workspace.name} · {workspace.roleKey}
                 </li>
               ))}
             </ul>
@@ -50,9 +51,12 @@ export default function DashboardPage() {
         </div>
 
         <Can permission="members:invite">
-          <p className={styles.success}>
-            You can invite members in this workspace.
-          </p>
+          {selectedWorkspace?.type === "ORGANIZATION" && (
+            <p className={styles.success}>
+              You can invite members in this workspace.{" "}
+              <Link href="/members">Manage members</Link>
+            </p>
+          )}
         </Can>
 
         <p className={styles.muted}>

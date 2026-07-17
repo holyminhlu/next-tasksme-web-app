@@ -1,20 +1,20 @@
 import type { Prisma } from "../../../generated/prisma/client.js";
 import { ForbiddenError } from "../../lib/errors.js";
 
-export async function lockCompany(
+export async function lockWorkspace(
   tx: Prisma.TransactionClient,
-  companyId: string,
+  workspaceId: string,
 ) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${companyId}))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${workspaceId}))`;
 }
 
 export async function countActiveOwners(
   tx: Prisma.TransactionClient,
-  companyId: string,
+  workspaceId: string,
 ) {
-  return tx.companyMember.count({
+  return tx.workspaceMember.count({
     where: {
-      companyId,
+      workspaceId,
       deletedAt: null,
       status: "ACTIVE",
       role: {
@@ -60,7 +60,7 @@ export async function assertCanModifyMember(options: {
 
 export async function assertNotLastOwner(
   tx: Prisma.TransactionClient,
-  companyId: string,
+  workspaceId: string,
   targetRoleKey: string,
   nextRoleKey?: string,
 ) {
@@ -72,7 +72,7 @@ export async function assertNotLastOwner(
     return;
   }
 
-  const owners = await countActiveOwners(tx, companyId);
+  const owners = await countActiveOwners(tx, workspaceId);
   if (owners <= 1) {
     throw new ForbiddenError("Cannot demote or remove the last owner");
   }

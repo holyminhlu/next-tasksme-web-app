@@ -23,7 +23,7 @@ import type {
   RegisterInput,
   ResendVerificationInput,
   ResetPasswordInput,
-  SelectCompanyInput,
+  SelectWorkspaceInput,
   VerifyEmailInput,
 } from "./auth.schemas.js";
 import {
@@ -31,18 +31,41 @@ import {
   addDays,
   addHours,
   bumpAuthVersion,
-  createCompanyRoles,
   ensurePermissionCatalog,
-  ensureUniqueSlug,
   getClientMeta,
   issueTokenPair,
   revokeUserSessions,
-  slugify,
 } from "./auth.helpers.js";
 
 const GENERIC_LOGIN_ERROR = "Invalid email or password";
 const GENERIC_EMAIL_SENT =
   "If an account exists for this email, further instructions have been sent.";
+
+function mapWorkspaceMembership(membership: {
+  id: string;
+  role: { key: string };
+  workspace: {
+    id: string;
+    name: string;
+    slug: string;
+    type: string;
+  };
+  onboarding?: {
+    status: string;
+    currentStep: string;
+  } | null;
+}) {
+  return {
+    id: membership.workspace.id,
+    name: membership.workspace.name,
+    slug: membership.workspace.slug,
+    type: membership.workspace.type,
+    roleKey: membership.role.key,
+    membershipId: membership.id,
+    onboardingStatus: membership.onboarding?.status ?? null,
+    currentStep: membership.onboarding?.currentStep ?? null,
+  };
+}
 
 export class AuthService {
   async register(input: RegisterInput, req: Request) {
@@ -59,10 +82,10 @@ export class AuthService {
     const verificationHash = hashToken(verificationToken);
     const env = getEnv();
 
-    const result = await prisma.$transaction(async (tx) => {
+    const user = await prisma.$transaction(async (tx) => {
       await ensurePermissionCatalog(tx);
 
-      const user = await tx.user.create({
+      const created = await tx.user.create({
         data: {
           email: input.email,
           passwordHash,
@@ -71,71 +94,40 @@ export class AuthService {
         },
       });
 
-      const slug = await ensureUniqueSlug(slugify(input.companyName), tx);
-      const company = await tx.company.create({
-        data: {
-          name: input.companyName,
-          slug,
-          ownerId: user.id,
-        },
-      });
-
-      const roles = await createCompanyRoles(company.id, tx);
-      const ownerRole = roles.find((role) => role.key === "owner");
-      if (!ownerRole) {
-        throw new Error("Owner role was not created");
-      }
-
-      await tx.companyMember.create({
-        data: {
-          companyId: company.id,
-          userId: user.id,
-          roleId: ownerRole.id,
-          status: "ACTIVE",
-        },
-      });
-
       await tx.oneTimeToken.create({
         data: {
-          userId: user.id,
+          userId: created.id,
           type: "EMAIL_VERIFICATION",
           tokenHash: verificationHash,
           expiresAt: addHours(env.EMAIL_VERIFICATION_TTL_HOURS),
         },
       });
 
-      return { user, company };
+      return created;
     });
 
     const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
     await getEmailService().send({
-      to: result.user.email,
+      to: user.email,
       subject: "Verify your TaskMng email",
       text: `Verify your email: ${verifyUrl}`,
       html: `<p>Welcome to TaskMng.</p><p><a href="${verifyUrl}">Verify your email</a></p>`,
     });
 
-    const meta = getClientMeta(req);
     await writeAuditLog({
       action: "auth.register",
-      userId: result.user.id,
-      companyId: result.company.id,
+      userId: user.id,
       entityType: "user",
-      entityId: result.user.id,
-      ...meta,
+      entityId: user.id,
+      ...getClientMeta(req),
     });
 
     return {
       user: {
-        id: result.user.id,
-        email: result.user.email,
-        fullName: result.user.fullName,
-        status: result.user.status,
-      },
-      company: {
-        id: result.company.id,
-        name: result.company.name,
-        slug: result.company.slug,
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        status: user.status,
       },
       requiresEmailVerification: true,
     };
@@ -671,13 +663,13 @@ export class AuthService {
           where: {
             deletedAt: null,
             status: "ACTIVE",
-            company: {
+            workspace: {
               deletedAt: null,
               status: "ACTIVE",
             },
           },
           include: {
-            company: true,
+            workspace: true,
             role: true,
           },
         },
@@ -688,63 +680,90 @@ export class AuthService {
       throw new UnauthorizedError();
     }
 
+    const onboardings = await prisma.workspaceOnboarding.findMany({
+      where: {
+        userId,
+        workspaceId: {
+          in: user.memberships.map((membership) => membership.workspaceId),
+        },
+      },
+    });
+    const onboardingByWorkspace = new Map(
+      onboardings.map((item) => [item.workspaceId, item]),
+    );
+
     return {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
       status: user.status,
       emailVerifiedAt: user.emailVerifiedAt,
-      companies: user.memberships.map((membership) => ({
-        id: membership.company.id,
-        name: membership.company.name,
-        slug: membership.company.slug,
-        roleKey: membership.role.key,
-        membershipId: membership.id,
-      })),
+      lastActiveWorkspaceId: user.lastActiveWorkspaceId,
+      workspaces: user.memberships.map((membership) =>
+        mapWorkspaceMembership({
+          ...membership,
+          onboarding: onboardingByWorkspace.get(membership.workspaceId) ?? null,
+        }),
+      ),
     };
   }
 
-  async listCompanies(userId: string) {
+  async listWorkspaces(userId: string) {
     const profile = await this.me(userId);
-    return profile.companies;
+    return profile.workspaces;
   }
 
-  async selectCompany(userId: string, input: SelectCompanyInput, req: Request) {
-    const membership = await prisma.companyMember.findFirst({
+  async selectWorkspace(
+    userId: string,
+    input: SelectWorkspaceInput,
+    req: Request,
+  ) {
+    const membership = await prisma.workspaceMember.findFirst({
       where: {
         userId,
-        companyId: input.companyId,
+        workspaceId: input.workspaceId,
         deletedAt: null,
         status: "ACTIVE",
-        company: {
+        workspace: {
           deletedAt: null,
           status: "ACTIVE",
         },
       },
       include: {
-        company: true,
+        workspace: true,
         role: true,
       },
     });
 
     if (!membership) {
-      throw new ForbiddenError("You are not a member of this company");
+      throw new ForbiddenError("You are not a member of this workspace");
     }
 
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastActiveWorkspaceId: membership.workspaceId },
+    });
+
+    const onboarding = await prisma.workspaceOnboarding.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: membership.workspaceId,
+          userId,
+        },
+      },
+    });
+
     await writeAuditLog({
-      action: "auth.select_company",
+      action: "auth.select_workspace",
       userId,
-      companyId: membership.companyId,
+      workspaceId: membership.workspaceId,
       ...getClientMeta(req),
     });
 
-    return {
-      id: membership.company.id,
-      name: membership.company.name,
-      slug: membership.company.slug,
-      roleKey: membership.role.key,
-      membershipId: membership.id,
-    };
+    return mapWorkspaceMembership({
+      ...membership,
+      onboarding,
+    });
   }
 
   async listSessions(userId: string, currentSessionId?: string) {

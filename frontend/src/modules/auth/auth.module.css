@@ -172,6 +172,87 @@
   cursor: not-allowed;
 }
 
+.socialAuth {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: #e2e8f0;
+}
+
+.socialButtons {
+  display: grid;
+  gap: 10px;
+}
+
+.socialButton {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+.googleMark {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #4285f4;
+}
+
+.microsoftMark {
+  display: grid;
+  grid-template-columns: repeat(2, 7px);
+  grid-template-rows: repeat(2, 7px);
+  gap: 2px;
+}
+
+.microsoftMark i:nth-child(1) {
+  background: #f25022;
+}
+
+.microsoftMark i:nth-child(2) {
+  background: #7fba00;
+}
+
+.microsoftMark i:nth-child(3) {
+  background: #00a4ef;
+}
+
+.microsoftMark i:nth-child(4) {
+  background: #ffb900;
+}
+
+.comingSoon {
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 0.65rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .secondaryButton {
   border: 1px solid #cbd5e1;
   border-radius: 999px;
@@ -208,13 +289,13 @@
   font-size: 0.9rem;
 }
 
-.companyList {
+.workspaceList {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.companyOption {
+.workspaceOption {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -227,17 +308,17 @@
   text-align: left;
 }
 
-.companyOption:hover {
+.workspaceOption:hover {
   border-color: #2563eb;
   background: #eff6ff;
 }
 
-.companyOption strong {
+.workspaceOption strong {
   display: block;
   color: #0f172a;
 }
 
-.companyOption span {
+.workspaceOption span {
   color: #64748b;
   font-size: 0.85rem;
 }
@@ -264,6 +345,22 @@
   color: #0f172a;
 }
 
+.appNav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.appNav a {
+  color: #475569;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.appNav a:hover {
+  color: #2563eb;
+}
+
 .appActions {
   display: flex;
   align-items: center;
@@ -271,7 +368,7 @@
   flex-wrap: wrap;
 }
 
-.companySelect {
+.workspaceSelect {
   border: 1px solid #cbd5e1;
   border-radius: 999px;
   padding: 0.45rem 0.85rem;

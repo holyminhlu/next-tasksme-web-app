@@ -11,16 +11,21 @@ import {
   registerSchema,
   resendVerificationSchema,
   resetPasswordSchema,
-  selectCompanySchema,
+  selectWorkspaceSchema,
   verifyEmailSchema,
 } from "../modules/auth/auth.schemas.js";
 import {
   acceptInvitationSchema,
-  companyIdParamsSchema,
+  applyModulePresetSchema,
+  createFirstProjectSchema,
+  createWorkspaceSchema,
   inviteMemberSchema,
   listMembersQuerySchema,
-  updateCompanySchema,
-} from "../modules/companies/companies.schemas.js";
+  updateModulesSchema,
+  updateOnboardingSchema,
+  updateWorkspaceSchema,
+  workspaceIdParamsSchema,
+} from "../modules/workspaces/workspaces.schemas.js";
 
 extendZodWithOpenApi(z);
 
@@ -91,12 +96,12 @@ const authPaths: Array<{
   },
   {
     method: "post",
-    path: "/api/v1/auth/select-company",
+    path: "/api/v1/auth/select-workspace",
     tag: "Auth",
-    schema: selectCompanySchema,
+    schema: selectWorkspaceSchema,
     security: true,
   },
-  { method: "get", path: "/api/v1/me/companies", tag: "Auth", security: true },
+  { method: "get", path: "/api/v1/me/workspaces", tag: "Auth", security: true },
 ];
 
 for (const item of authPaths) {
@@ -134,48 +139,132 @@ registry.registerPath({
 });
 
 registry.registerPath({
-  method: "get",
-  path: "/api/v1/companies/{companyId}",
-  tags: ["Companies"],
+  method: "post",
+  path: "/api/v1/workspaces",
+  tags: ["Workspaces"],
   security: [{ bearerAuth: [] }],
-  request: { params: companyIdParamsSchema },
-  responses: { 200: { description: "Company details" } },
+  request: jsonBody(createWorkspaceSchema),
+  responses: { 201: { description: "Workspace created" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}",
+  tags: ["Workspaces"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema },
+  responses: { 200: { description: "Workspace details" } },
 });
 
 registry.registerPath({
   method: "patch",
-  path: "/api/v1/companies/{companyId}",
-  tags: ["Companies"],
+  path: "/api/v1/workspaces/{workspaceId}",
+  tags: ["Workspaces"],
   security: [{ bearerAuth: [] }],
   request: {
-    params: companyIdParamsSchema,
-    ...jsonBody(updateCompanySchema),
+    params: workspaceIdParamsSchema,
+    ...jsonBody(updateWorkspaceSchema),
   },
-  responses: { 200: { description: "Company updated" } },
+  responses: { 200: { description: "Workspace updated" } },
 });
 
 registry.registerPath({
   method: "get",
-  path: "/api/v1/companies/{companyId}/members",
-  tags: ["Companies"],
+  path: "/api/v1/workspaces/{workspaceId}/members",
+  tags: ["Workspaces"],
   security: [{ bearerAuth: [] }],
   request: {
-    params: companyIdParamsSchema,
+    params: workspaceIdParamsSchema,
     query: listMembersQuerySchema,
   },
-  responses: { 200: { description: "Company members" } },
+  responses: { 200: { description: "Workspace members" } },
 });
 
 registry.registerPath({
   method: "post",
-  path: "/api/v1/companies/{companyId}/invitations",
-  tags: ["Companies"],
+  path: "/api/v1/workspaces/{workspaceId}/invitations",
+  tags: ["Workspaces"],
   security: [{ bearerAuth: [] }],
   request: {
-    params: companyIdParamsSchema,
+    params: workspaceIdParamsSchema,
     ...jsonBody(inviteMemberSchema),
   },
   responses: { 201: { description: "Invitation created" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/onboarding",
+  tags: ["Onboarding"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema },
+  responses: { 200: { description: "Onboarding progress" } },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/workspaces/{workspaceId}/onboarding",
+  tags: ["Onboarding"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    ...jsonBody(updateOnboardingSchema),
+  },
+  responses: { 200: { description: "Onboarding updated" } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/onboarding/complete",
+  tags: ["Onboarding"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema },
+  responses: { 200: { description: "Onboarding completed" } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/onboarding/first-project",
+  tags: ["Onboarding"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    ...jsonBody(createFirstProjectSchema),
+  },
+  responses: { 201: { description: "First project created" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/modules",
+  tags: ["Modules"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema },
+  responses: { 200: { description: "Workspace modules" } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/modules/presets",
+  tags: ["Modules"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    ...jsonBody(applyModulePresetSchema),
+  },
+  responses: { 200: { description: "Module preset applied" } },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/workspaces/{workspaceId}/modules",
+  tags: ["Modules"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    ...jsonBody(updateModulesSchema),
+  },
+  responses: { 200: { description: "Modules updated" } },
 });
 
 registry.registerPath({
@@ -199,8 +288,8 @@ export function buildOpenApiDocument() {
     openapi: "3.0.3",
     info: {
       title: "TaskMng SME API",
-      version: "1.1.0",
-      description: "Phase 1 Authentication & Authorization API",
+      version: "2.0.0",
+      description: "Phase 2 Workspace & Onboarding API",
     },
     servers: [{ url: "http://localhost:4000" }],
   });

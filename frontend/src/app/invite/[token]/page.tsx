@@ -17,7 +17,7 @@ export default function InvitePage() {
   const router = useRouter();
   const params = useParams<{ token: string }>();
   const token = params.token;
-  const { status, user, refreshProfile } = useAuth();
+  const { status, user, selectWorkspace } = useAuth();
 
   const [preview, setPreview] = useState<InvitationPreview | null>(null);
   const [fullName, setFullName] = useState("");
@@ -93,10 +93,25 @@ export default function InvitePage() {
       return;
     }
 
-    setMessage("Invitation accepted. Redirecting...");
-    await refreshProfile();
+    if (needsAccount) {
+      // The account was created, but there is no session yet. Sign in and
+      // continue into the invited onboarding flow.
+      setMessage("Invitation accepted. Sign in to continue setup...");
+      setSubmitting(false);
+      setTimeout(
+        () =>
+          router.replace(
+            `/login?redirect=${encodeURIComponent("/onboarding")}`,
+          ),
+        1200,
+      );
+      return;
+    }
+
+    setMessage("Invitation accepted. Redirecting to setup...");
+    await selectWorkspace(result.data.workspaceId);
     setSubmitting(false);
-    setTimeout(() => router.replace("/dashboard"), 1200);
+    setTimeout(() => router.replace("/onboarding"), 800);
   }
 
   if (loading) {
@@ -112,8 +127,8 @@ export default function InvitePage() {
       title="Accept invitation"
       description={
         preview
-          ? `Join ${preview.company.name} as ${preview.roleKey}.`
-          : "Company invitation"
+          ? `Join ${preview.workspace.name} as ${preview.roleKey}.`
+          : "Workspace invitation"
       }
       footer={
         <>
@@ -122,20 +137,45 @@ export default function InvitePage() {
       }
     >
       {preview && (
-        <p className={styles.muted}>
-          Invited email: <strong>{preview.email}</strong>
+        <div className={styles.workspaceList}>
+          <div className={styles.workspaceOption}>
+            <div>
+              <strong>{preview.workspace.name}</strong>
+              <span>
+                Role: {preview.roleKey} · Invitation for{" "}
+                <strong>{preview.email}</strong>
+              </span>
+            </div>
+          </div>
           {user && user.email !== preview.email && (
-            <> · Signed in as {user.email}</>
+            <p className={styles.error}>
+              You are signed in as {user.email}, but this invitation was sent
+              to {preview.email}. Sign out first to accept it with the invited
+              email.
+            </p>
           )}
-        </p>
+        </div>
       )}
 
       <form className={styles.form} onSubmit={handleAccept}>
         <FormError message={error} />
         {message && <div className={styles.success}>{message}</div>}
 
-        {needsAccount && (
+        {needsAccount && preview && (
           <>
+            <div className={styles.field}>
+              <label htmlFor="invitedEmail">Email</label>
+              <input
+                id="invitedEmail"
+                name="invitedEmail"
+                type="email"
+                value={preview.email}
+                disabled
+                readOnly
+                aria-label="Invited email (locked)"
+              />
+            </div>
+
             <div className={styles.field}>
               <label htmlFor="fullName">Full name</label>
               <input
@@ -173,7 +213,11 @@ export default function InvitePage() {
         <button
           type="submit"
           className={styles.primaryButton}
-          disabled={submitting || !preview}
+          disabled={
+            submitting ||
+            !preview ||
+            Boolean(user && preview && user.email !== preview.email)
+          }
         >
           {submitting ? "Accepting..." : "Accept invitation"}
         </button>

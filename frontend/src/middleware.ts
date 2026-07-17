@@ -10,9 +10,16 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/session-expired",
   "/forbidden",
+  "/terms",
+  "/privacy",
 ];
 
-const PROTECTED_PATHS = ["/dashboard", "/select-company"];
+const PROTECTED_PATHS = [
+  "/dashboard",
+  "/members",
+  "/select-workspace",
+  "/onboarding",
+];
 
 const REFRESH_COOKIE = "refreshToken";
 
