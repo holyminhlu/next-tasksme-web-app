@@ -24,6 +24,10 @@ export const PERMISSIONS = [
     description: "Remove company members",
   },
   {
+    key: "ownership:transfer",
+    description: "Transfer company ownership",
+  },
+  {
     key: "roles:read",
     description: "View company roles",
   },
@@ -60,3 +64,9 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
   ],
   member: ["company:read", "members:read", "roles:read"],
 };
+
+export const INVITABLE_ROLE_KEYS: SystemRoleKey[] = [
+  "admin",
+  "manager",
+  "member",
+];

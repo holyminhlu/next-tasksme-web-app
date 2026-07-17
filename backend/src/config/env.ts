@@ -18,6 +18,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   APP_NAME: z.string().min(1).default("taskmng-backend"),
   APP_URL: z.string().url().default("http://localhost:4000"),
+  FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   CORS_ORIGINS: z
     .string()
     .min(1)
@@ -37,6 +38,8 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_ACCESS_EXPIRES_IN: z.string().min(1).default("15m"),
   REFRESH_TOKEN_EXPIRES_DAYS: z.coerce.number().int().positive().default(14),
+  REFRESH_TOKEN_REMEMBER_DAYS: z.coerce.number().int().positive().default(30),
+  REFRESH_TOKEN_ABSOLUTE_DAYS: z.coerce.number().int().positive().default(60),
   COOKIE_SECURE: booleanFromEnv.default(false),
   COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
   COOKIE_DOMAIN: z.string().optional(),
@@ -45,6 +48,13 @@ const envSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  MAX_FAILED_LOGIN_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  ACCOUNT_LOCK_MINUTES: z.coerce.number().int().positive().default(15),
+  EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  PASSWORD_RESET_TTL_HOURS: z.coerce.number().int().positive().default(1),
+  INVITATION_TTL_HOURS: z.coerce.number().int().positive().default(72),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().email().default("onboarding@resend.dev"),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
@@ -74,6 +84,13 @@ export function loadEnv(overrides?: Record<string, string | undefined>): Env {
   }
 
   const data = parsed.data;
+
+  if (data.NODE_ENV === "production" && !data.RESEND_API_KEY) {
+    throw new Error(
+      "Invalid environment configuration: RESEND_API_KEY is required in production",
+    );
+  }
+
   const env: Env = {
     ...data,
     isProduction: data.NODE_ENV === "production",

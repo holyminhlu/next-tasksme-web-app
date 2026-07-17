@@ -8,6 +8,7 @@ describe("validation and error envelope", () => {
     const response = await request(app).post("/api/v1/auth/register").send({
       email: "not-an-email",
       password: "short",
+      confirmPassword: "different",
       fullName: "A",
       companyName: "B",
     });

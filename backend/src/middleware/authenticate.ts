@@ -26,15 +26,33 @@ export async function authenticate(
       throw new UnauthorizedError("Invalid or expired access token");
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        id: payload.sub,
-        deletedAt: null,
-      },
-    });
+    const [user, session] = await Promise.all([
+      prisma.user.findFirst({
+        where: {
+          id: payload.sub,
+          deletedAt: null,
+        },
+      }),
+      prisma.refreshSession.findFirst({
+        where: {
+          id: payload.sid,
+          userId: payload.sub,
+          revokedAt: null,
+          absoluteExpiresAt: { gt: new Date() },
+        },
+      }),
+    ]);
 
     if (!user || user.status !== "ACTIVE") {
       throw new UnauthorizedError("User is not active");
+    }
+
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      throw new UnauthorizedError("Account is temporarily locked");
+    }
+
+    if (!session || user.authVersion !== payload.authVersion) {
+      throw new UnauthorizedError("Session is no longer valid");
     }
 
     req.user = {
@@ -42,7 +60,9 @@ export async function authenticate(
       email: user.email,
       fullName: user.fullName,
       status: user.status,
+      authVersion: user.authVersion,
     };
+    req.sessionId = session.id;
 
     next();
   } catch (error) {

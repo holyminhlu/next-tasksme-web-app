@@ -1,147 +1,48 @@
 import type { Request } from "express";
 import { prisma } from "../../config/database.js";
 import { getEnv } from "../../config/env.js";
-import { logger } from "../../config/logger.js";
-import { ConflictError, UnauthorizedError } from "../../lib/errors.js";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from "../../lib/errors.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import {
-  createTokenFamilyId,
-  generateRefreshToken,
+  generateOpaqueToken,
   hashToken,
   signAccessToken,
 } from "../../lib/tokens.js";
-import { PERMISSIONS, ROLE_PERMISSION_MAP, SYSTEM_ROLE_KEYS } from "./permissions.js";
-import type { LoginInput, RegisterInput } from "./auth.schemas.js";
+import { writeAuditLog } from "../../services/audit.service.js";
+import { getEmailService } from "../../services/email/index.js";
+import type {
+  ChangePasswordInput,
+  ForgotPasswordInput,
+  LoginInput,
+  RegisterInput,
+  ResendVerificationInput,
+  ResetPasswordInput,
+  SelectCompanyInput,
+  VerifyEmailInput,
+} from "./auth.schemas.js";
+import {
+  REFRESH_COOKIE_NAME,
+  addDays,
+  addHours,
+  bumpAuthVersion,
+  createCompanyRoles,
+  ensurePermissionCatalog,
+  ensureUniqueSlug,
+  getClientMeta,
+  issueTokenPair,
+  revokeUserSessions,
+  slugify,
+} from "./auth.helpers.js";
 
-const REFRESH_COOKIE_NAME = "refreshToken";
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-}
-
-async function ensureUniqueSlug(base: string): Promise<string> {
-  let candidate = base || "company";
-  let suffix = 1;
-
-  while (true) {
-    const existing = await prisma.company.findUnique({
-      where: { slug: candidate },
-      select: { id: true },
-    });
-
-    if (!existing) {
-      return candidate;
-    }
-
-    candidate = `${base}-${suffix}`;
-    suffix += 1;
-  }
-}
-
-async function ensurePermissionCatalog() {
-  for (const permission of PERMISSIONS) {
-    await prisma.permission.upsert({
-      where: { key: permission.key },
-      update: { description: permission.description },
-      create: {
-        key: permission.key,
-        description: permission.description,
-      },
-    });
-  }
-}
-
-async function createCompanyRoles(companyId: string) {
-  const permissions = await prisma.permission.findMany();
-  const permissionByKey = new Map(
-    permissions.map((permission) => [permission.key, permission.id]),
-  );
-
-  const roles = [];
-
-  for (const roleKey of SYSTEM_ROLE_KEYS) {
-    const role = await prisma.role.create({
-      data: {
-        companyId,
-        key: roleKey,
-        name: roleKey.charAt(0).toUpperCase() + roleKey.slice(1),
-        description: `${roleKey} role`,
-        isSystem: true,
-        rolePermissions: {
-          create: ROLE_PERMISSION_MAP[roleKey]
-            .map((permissionKey) => {
-              const permissionId = permissionByKey.get(permissionKey);
-              if (!permissionId) {
-                return null;
-              }
-
-              return { permissionId };
-            })
-            .filter((item): item is { permissionId: string } => Boolean(item)),
-        },
-      },
-    });
-
-    roles.push(role);
-  }
-
-  return roles;
-}
-
-function getRefreshExpiryDate(): Date {
-  const env = getEnv();
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + env.REFRESH_TOKEN_EXPIRES_DAYS);
-  return expiresAt;
-}
-
-async function issueTokenPair(
-  user: { id: string; email: string; fullName: string },
-  req: Request,
-  familyId = createTokenFamilyId(),
-) {
-  const accessToken = signAccessToken({
-    sub: user.id,
-    email: user.email,
-  });
-  const refreshToken = generateRefreshToken();
-  const tokenHash = hashToken(refreshToken);
-
-  await prisma.refreshSession.create({
-    data: {
-      userId: user.id,
-      familyId,
-      tokenHash,
-      expiresAt: getRefreshExpiryDate(),
-      userAgent: req.get("user-agent") ?? undefined,
-      ipAddress: req.ip,
-    },
-  });
-
-  return { accessToken, refreshToken };
-}
-
-export function getRefreshCookieOptions() {
-  const env = getEnv();
-
-  return {
-    httpOnly: true,
-    secure: env.COOKIE_SECURE,
-    sameSite: env.COOKIE_SAME_SITE,
-    domain: env.COOKIE_DOMAIN,
-    path: "/api/v1/auth",
-    maxAge: env.REFRESH_TOKEN_EXPIRES_DAYS * 24 * 60 * 60 * 1000,
-  } as const;
-}
-
-export function getRefreshCookieName() {
-  return REFRESH_COOKIE_NAME;
-}
+const GENERIC_LOGIN_ERROR = "Invalid email or password";
+const GENERIC_EMAIL_SENT =
+  "If an account exists for this email, further instructions have been sent.";
 
 export class AuthService {
   async register(input: RegisterInput, req: Request) {
@@ -153,20 +54,24 @@ export class AuthService {
       throw new ConflictError("Email is already registered");
     }
 
-    await ensurePermissionCatalog();
-
     const passwordHash = await hashPassword(input.password);
-    const slug = await ensureUniqueSlug(slugify(input.companyName));
+    const verificationToken = generateOpaqueToken();
+    const verificationHash = hashToken(verificationToken);
+    const env = getEnv();
 
     const result = await prisma.$transaction(async (tx) => {
+      await ensurePermissionCatalog(tx);
+
       const user = await tx.user.create({
         data: {
           email: input.email,
           passwordHash,
           fullName: input.fullName,
+          status: "PENDING_VERIFICATION",
         },
       });
 
+      const slug = await ensureUniqueSlug(slugify(input.companyName), tx);
       const company = await tx.company.create({
         data: {
           name: input.companyName,
@@ -175,39 +80,13 @@ export class AuthService {
         },
       });
 
-      const permissions = await tx.permission.findMany();
-      const permissionByKey = new Map(
-        permissions.map((permission) => [permission.key, permission.id]),
-      );
-
-      const roles = [];
-      for (const roleKey of SYSTEM_ROLE_KEYS) {
-        const role = await tx.role.create({
-          data: {
-            companyId: company.id,
-            key: roleKey,
-            name: roleKey.charAt(0).toUpperCase() + roleKey.slice(1),
-            description: `${roleKey} role`,
-            isSystem: true,
-            rolePermissions: {
-              create: ROLE_PERMISSION_MAP[roleKey]
-                .map((permissionKey) => {
-                  const permissionId = permissionByKey.get(permissionKey);
-                  return permissionId ? { permissionId } : null;
-                })
-                .filter((item): item is { permissionId: string } => Boolean(item)),
-            },
-          },
-        });
-        roles.push(role);
-      }
-
+      const roles = await createCompanyRoles(company.id, tx);
       const ownerRole = roles.find((role) => role.key === "owner");
       if (!ownerRole) {
         throw new Error("Owner role was not created");
       }
 
-      const membership = await tx.companyMember.create({
+      await tx.companyMember.create({
         data: {
           companyId: company.id,
           userId: user.id,
@@ -216,37 +95,141 @@ export class AuthService {
         },
       });
 
-      return { user, company, membership };
+      await tx.oneTimeToken.create({
+        data: {
+          userId: user.id,
+          type: "EMAIL_VERIFICATION",
+          tokenHash: verificationHash,
+          expiresAt: addHours(env.EMAIL_VERIFICATION_TTL_HOURS),
+        },
+      });
+
+      return { user, company };
     });
 
-    const tokens = await issueTokenPair(result.user, req);
+    const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+    await getEmailService().send({
+      to: result.user.email,
+      subject: "Verify your TaskMng email",
+      text: `Verify your email: ${verifyUrl}`,
+      html: `<p>Welcome to TaskMng.</p><p><a href="${verifyUrl}">Verify your email</a></p>`,
+    });
 
-    logger.info(
-      {
-        requestId: req.requestId,
-        userId: result.user.id,
-        companyId: result.company.id,
-        event: "auth.register",
-      },
-      "User registered",
-    );
+    const meta = getClientMeta(req);
+    await writeAuditLog({
+      action: "auth.register",
+      userId: result.user.id,
+      companyId: result.company.id,
+      entityType: "user",
+      entityId: result.user.id,
+      ...meta,
+    });
 
     return {
       user: {
         id: result.user.id,
         email: result.user.email,
         fullName: result.user.fullName,
+        status: result.user.status,
       },
       company: {
         id: result.company.id,
         name: result.company.name,
         slug: result.company.slug,
       },
-      ...tokens,
+      requiresEmailVerification: true,
     };
   }
 
+  async verifyEmail(input: VerifyEmailInput, req: Request) {
+    const tokenHash = hashToken(input.token);
+    const record = await prisma.oneTimeToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (!record || record.type !== "EMAIL_VERIFICATION") {
+      throw new ValidationError("Invalid or expired verification token");
+    }
+
+    if (record.usedAt || record.expiresAt.getTime() < Date.now()) {
+      throw new ValidationError("Invalid or expired verification token");
+    }
+
+    await prisma.$transaction([
+      prisma.oneTimeToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+      prisma.user.update({
+        where: { id: record.userId },
+        data: {
+          status: "ACTIVE",
+          emailVerifiedAt: new Date(),
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      }),
+    ]);
+
+    await writeAuditLog({
+      action: "auth.verify_email",
+      userId: record.userId,
+      entityType: "user",
+      entityId: record.userId,
+      ...getClientMeta(req),
+    });
+
+    return { verified: true };
+  }
+
+  async resendVerification(input: ResendVerificationInput, req: Request) {
+    const user = await prisma.user.findUnique({
+      where: { email: input.email },
+    });
+
+    if (user && user.status === "PENDING_VERIFICATION" && !user.deletedAt) {
+      const env = getEnv();
+      const token = generateOpaqueToken();
+
+      await prisma.oneTimeToken.updateMany({
+        where: {
+          userId: user.id,
+          type: "EMAIL_VERIFICATION",
+          usedAt: null,
+        },
+        data: { usedAt: new Date() },
+      });
+
+      await prisma.oneTimeToken.create({
+        data: {
+          userId: user.id,
+          type: "EMAIL_VERIFICATION",
+          tokenHash: hashToken(token),
+          expiresAt: addHours(env.EMAIL_VERIFICATION_TTL_HOURS),
+        },
+      });
+
+      const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${token}`;
+      await getEmailService().send({
+        to: user.email,
+        subject: "Verify your TaskMng email",
+        text: `Verify your email: ${verifyUrl}`,
+        html: `<p><a href="${verifyUrl}">Verify your email</a></p>`,
+      });
+
+      await writeAuditLog({
+        action: "auth.resend_verification",
+        userId: user.id,
+        ...getClientMeta(req),
+      });
+    }
+
+    return { message: GENERIC_EMAIL_SENT };
+  }
+
   async login(input: LoginInput, req: Request) {
+    const env = getEnv();
     const user = await prisma.user.findFirst({
       where: {
         email: input.email,
@@ -254,33 +237,94 @@ export class AuthService {
       },
     });
 
-    if (!user || user.status !== "ACTIVE") {
-      throw new UnauthorizedError("Invalid email or password");
+    if (!user) {
+      await writeAuditLog({
+        action: "auth.login_failed",
+        metadata: { reason: "unknown_email" },
+        ...getClientMeta(req),
+      });
+      throw new UnauthorizedError(GENERIC_LOGIN_ERROR);
+    }
+
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      await writeAuditLog({
+        action: "auth.login_locked",
+        userId: user.id,
+        ...getClientMeta(req),
+      });
+      throw new ForbiddenError("Account is temporarily locked");
+    }
+
+    if (user.status === "DISABLED") {
+      throw new ForbiddenError("Account is disabled");
+    }
+
+    if (user.status === "PENDING_VERIFICATION") {
+      throw new ForbiddenError("Email verification is required");
+    }
+
+    if (user.status === "LOCKED") {
+      throw new ForbiddenError("Account is locked");
     }
 
     const valid = await verifyPassword(user.passwordHash, input.password);
     if (!valid) {
-      throw new UnauthorizedError("Invalid email or password");
+      const attempts = user.failedLoginAttempts + 1;
+      const shouldLock = attempts >= env.MAX_FAILED_LOGIN_ATTEMPTS;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: attempts,
+          status: shouldLock ? "LOCKED" : user.status,
+          lockedUntil: shouldLock
+            ? addHours(env.ACCOUNT_LOCK_MINUTES / 60)
+            : null,
+        },
+      });
+
+      await writeAuditLog({
+        action: shouldLock ? "auth.account_locked" : "auth.login_failed",
+        userId: user.id,
+        metadata: { attempts },
+        ...getClientMeta(req),
+      });
+
+      throw new UnauthorizedError(GENERIC_LOGIN_ERROR);
     }
 
-    const tokens = await issueTokenPair(user, req);
-
-    logger.info(
-      {
-        requestId: req.requestId,
-        userId: user.id,
-        event: "auth.login",
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        status: "ACTIVE",
+        lastLoginAt: new Date(),
       },
-      "User logged in",
-    );
+    });
+
+    const tokens = await issueTokenPair(updatedUser, req, {
+      rememberMe: input.rememberMe,
+    });
+
+    await writeAuditLog({
+      action: "auth.login",
+      userId: user.id,
+      entityType: "refresh_session",
+      entityId: tokens.session.id,
+      ...getClientMeta(req),
+    });
 
     return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      rememberMe: tokens.rememberMe,
       user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
+        id: updatedUser.id,
+        email: updatedUser.email,
+        fullName: updatedUser.fullName,
+        status: updatedUser.status,
       },
-      ...tokens,
     };
   }
 
@@ -308,74 +352,106 @@ export class AuthService {
         },
         data: {
           revokedAt: new Date(),
+          revokeReason: "reuse_detected",
         },
       });
 
-      logger.warn(
-        {
-          requestId: req.requestId,
-          userId: session.userId,
-          familyId: session.familyId,
-          event: "auth.refresh_reuse",
-        },
-        "Refresh token reuse detected",
-      );
+      await writeAuditLog({
+        action: "auth.refresh_reuse",
+        userId: session.userId,
+        entityType: "refresh_family",
+        entityId: session.familyId,
+        ...getClientMeta(req),
+      });
 
       throw new UnauthorizedError("Refresh token has been revoked");
     }
 
-    if (session.expiresAt.getTime() < Date.now()) {
+    if (
+      session.expiresAt.getTime() < Date.now() ||
+      session.absoluteExpiresAt.getTime() < Date.now()
+    ) {
       throw new UnauthorizedError("Refresh token expired");
     }
 
-    if (session.user.status !== "ACTIVE" || session.user.deletedAt) {
+    if (
+      session.user.status !== "ACTIVE" ||
+      session.user.deletedAt ||
+      session.user.lockedUntil
+    ) {
       throw new UnauthorizedError("User is not active");
     }
 
-    const nextRefreshToken = generateRefreshToken();
+    const nextRefreshToken = generateOpaqueToken();
     const nextHash = hashToken(nextRefreshToken);
+    const env = getEnv();
+    const rollingDays = session.rememberMe
+      ? env.REFRESH_TOKEN_REMEMBER_DAYS
+      : env.REFRESH_TOKEN_EXPIRES_DAYS;
 
-    await prisma.$transaction([
-      prisma.refreshSession.update({
-        where: { id: session.id },
+    const rotated = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.refreshSession.updateMany({
+        where: {
+          id: session.id,
+          revokedAt: null,
+          tokenHash,
+        },
         data: {
           revokedAt: new Date(),
+          revokeReason: "rotated",
           replacedByTokenHash: nextHash,
         },
-      }),
-      prisma.refreshSession.create({
+      });
+
+      if (claimed.count !== 1) {
+        return null;
+      }
+
+      const nextSession = await tx.refreshSession.create({
         data: {
           userId: session.userId,
           familyId: session.familyId,
           tokenHash: nextHash,
-          expiresAt: getRefreshExpiryDate(),
+          rememberMe: session.rememberMe,
+          expiresAt: addDays(rollingDays),
+          absoluteExpiresAt: session.absoluteExpiresAt,
+          lastUsedAt: new Date(),
           userAgent: req.get("user-agent") ?? undefined,
           ipAddress: req.ip,
         },
-      }),
-    ]);
+      });
+
+      return nextSession;
+    });
+
+    if (!rotated) {
+      throw new UnauthorizedError("Refresh token has been revoked");
+    }
 
     const accessToken = signAccessToken({
       sub: session.user.id,
       email: session.user.email,
+      sid: rotated.id,
+      authVersion: session.user.authVersion,
     });
 
-    logger.info(
-      {
-        requestId: req.requestId,
-        userId: session.userId,
-        event: "auth.refresh",
-      },
-      "Access token refreshed",
-    );
+    await writeAuditLog({
+      action: "auth.refresh",
+      userId: session.userId,
+      entityType: "refresh_session",
+      entityId: rotated.id,
+      ...getClientMeta(req),
+    });
 
     return {
       accessToken,
       refreshToken: nextRefreshToken,
+      rememberMe: session.rememberMe,
       user: {
         id: session.user.id,
         email: session.user.email,
         fullName: session.user.fullName,
+        status: session.user.status,
       },
     };
   }
@@ -397,17 +473,191 @@ export class AuthService {
 
     await prisma.refreshSession.update({
       where: { id: session.id },
-      data: { revokedAt: new Date() },
+      data: {
+        revokedAt: new Date(),
+        revokeReason: "logout",
+      },
     });
 
-    logger.info(
-      {
-        requestId: req.requestId,
-        userId: session.userId,
-        event: "auth.logout",
+    await writeAuditLog({
+      action: "auth.logout",
+      userId: session.userId,
+      entityType: "refresh_session",
+      entityId: session.id,
+      ...getClientMeta(req),
+    });
+  }
+
+  async logoutAll(userId: string, req: Request) {
+    await revokeUserSessions(userId, "logout_all");
+    await bumpAuthVersion(userId);
+
+    await writeAuditLog({
+      action: "auth.logout_all",
+      userId,
+      ...getClientMeta(req),
+    });
+
+    return { loggedOutAll: true };
+  }
+
+  async forgotPassword(input: ForgotPasswordInput, req: Request) {
+    const user = await prisma.user.findFirst({
+      where: {
+        email: input.email,
+        deletedAt: null,
       },
-      "User logged out",
-    );
+    });
+
+    if (user && user.status !== "DISABLED") {
+      const env = getEnv();
+      const token = generateOpaqueToken();
+
+      await prisma.oneTimeToken.updateMany({
+        where: {
+          userId: user.id,
+          type: "PASSWORD_RESET",
+          usedAt: null,
+        },
+        data: { usedAt: new Date() },
+      });
+
+      await prisma.oneTimeToken.create({
+        data: {
+          userId: user.id,
+          type: "PASSWORD_RESET",
+          tokenHash: hashToken(token),
+          expiresAt: addHours(env.PASSWORD_RESET_TTL_HOURS),
+        },
+      });
+
+      const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${token}`;
+      await getEmailService().send({
+        to: user.email,
+        subject: "Reset your TaskMng password",
+        text: `Reset your password: ${resetUrl}`,
+        html: `<p><a href="${resetUrl}">Reset your password</a></p>`,
+      });
+
+      await writeAuditLog({
+        action: "auth.forgot_password",
+        userId: user.id,
+        ...getClientMeta(req),
+      });
+    } else {
+      await writeAuditLog({
+        action: "auth.forgot_password",
+        metadata: { reason: "unknown_or_disabled" },
+        ...getClientMeta(req),
+      });
+    }
+
+    return { message: GENERIC_EMAIL_SENT };
+  }
+
+  async resetPassword(input: ResetPasswordInput, req: Request) {
+    const tokenHash = hashToken(input.token);
+    const record = await prisma.oneTimeToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (!record || record.type !== "PASSWORD_RESET") {
+      throw new ValidationError("Invalid or expired reset token");
+    }
+
+    if (record.usedAt || record.expiresAt.getTime() < Date.now()) {
+      throw new ValidationError("Invalid or expired reset token");
+    }
+
+    const passwordHash = await hashPassword(input.password);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.oneTimeToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      });
+
+      await tx.user.update({
+        where: { id: record.userId },
+        data: {
+          passwordHash,
+          passwordChangedAt: new Date(),
+          authVersion: { increment: 1 },
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          status:
+            record.user.status === "LOCKED" ? "ACTIVE" : record.user.status,
+        },
+      });
+
+      await tx.refreshSession.updateMany({
+        where: {
+          userId: record.userId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+          revokeReason: "password_reset",
+        },
+      });
+    });
+
+    await writeAuditLog({
+      action: "auth.reset_password",
+      userId: record.userId,
+      ...getClientMeta(req),
+    });
+
+    return { reset: true };
+  }
+
+  async changePassword(
+    userId: string,
+    input: ChangePasswordInput,
+    req: Request,
+  ) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedError();
+    }
+
+    const valid = await verifyPassword(user.passwordHash, input.currentPassword);
+    if (!valid) {
+      throw new UnauthorizedError("Current password is incorrect");
+    }
+
+    const passwordHash = await hashPassword(input.password);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash,
+          passwordChangedAt: new Date(),
+          authVersion: { increment: 1 },
+        },
+      });
+
+      await tx.refreshSession.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+          revokeReason: "password_change",
+        },
+      });
+    });
+
+    await writeAuditLog({
+      action: "auth.change_password",
+      userId,
+      ...getClientMeta(req),
+    });
+
+    return { changed: true };
   }
 
   async me(userId: string) {
@@ -421,6 +671,10 @@ export class AuthService {
           where: {
             deletedAt: null,
             status: "ACTIVE",
+            company: {
+              deletedAt: null,
+              status: "ACTIVE",
+            },
           },
           include: {
             company: true,
@@ -439,6 +693,7 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
       status: user.status,
+      emailVerifiedAt: user.emailVerifiedAt,
       companies: user.memberships.map((membership) => ({
         id: membership.company.id,
         name: membership.company.name,
@@ -448,9 +703,111 @@ export class AuthService {
       })),
     };
   }
+
+  async listCompanies(userId: string) {
+    const profile = await this.me(userId);
+    return profile.companies;
+  }
+
+  async selectCompany(userId: string, input: SelectCompanyInput, req: Request) {
+    const membership = await prisma.companyMember.findFirst({
+      where: {
+        userId,
+        companyId: input.companyId,
+        deletedAt: null,
+        status: "ACTIVE",
+        company: {
+          deletedAt: null,
+          status: "ACTIVE",
+        },
+      },
+      include: {
+        company: true,
+        role: true,
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenError("You are not a member of this company");
+    }
+
+    await writeAuditLog({
+      action: "auth.select_company",
+      userId,
+      companyId: membership.companyId,
+      ...getClientMeta(req),
+    });
+
+    return {
+      id: membership.company.id,
+      name: membership.company.name,
+      slug: membership.company.slug,
+      roleKey: membership.role.key,
+      membershipId: membership.id,
+    };
+  }
+
+  async listSessions(userId: string, currentSessionId?: string) {
+    const sessions = await prisma.refreshSession.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        absoluteExpiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        familyId: true,
+        rememberMe: true,
+        expiresAt: true,
+        absoluteExpiresAt: true,
+        lastUsedAt: true,
+        userAgent: true,
+        ipAddress: true,
+        createdAt: true,
+      },
+    });
+
+    return sessions.map((session) => ({
+      ...session,
+      current: session.id === currentSessionId,
+    }));
+  }
+
+  async revokeSession(userId: string, sessionId: string, req: Request) {
+    const session = await prisma.refreshSession.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundError("Session not found");
+    }
+
+    if (!session.revokedAt) {
+      await prisma.refreshSession.update({
+        where: { id: session.id },
+        data: {
+          revokedAt: new Date(),
+          revokeReason: "user_revoked",
+        },
+      });
+    }
+
+    await writeAuditLog({
+      action: "auth.revoke_session",
+      userId,
+      entityType: "refresh_session",
+      entityId: session.id,
+      ...getClientMeta(req),
+    });
+
+    return { revoked: true };
+  }
 }
 
 export const authService = new AuthService();
 
-// Keep helper available for tests/seeds that create companies outside register.
-export { createCompanyRoles, ensurePermissionCatalog };
+export { REFRESH_COOKIE_NAME };

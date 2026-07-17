@@ -1,6 +1,6 @@
 # next-task-sme-webapp
 
-Task Management SME — Phase 0 Foundation.
+Task Management SME — Phase 1 Authentication & Authorization.
 
 Tech stack:
 
@@ -109,4 +109,30 @@ trong network nội bộ Compose.
 
 ## Postman
 
-`postman/TaskMng-Phase0.postman_collection.json`
+`postman/TaskMng-Phase1.postman_collection.json`
+
+## Phase 1 Authentication
+
+Auth UI routes:
+
+- `/register`, `/login`, `/verify-email`
+- `/forgot-password`, `/reset-password`
+- `/select-company`, `/invite/[token]`
+- `/session-expired`, `/forbidden`
+- Protected app shell: `/dashboard`
+
+Backend auth highlights:
+
+- Email verification via Resend (or console transport when `RESEND_API_KEY` is empty)
+- Access JWT in memory + HttpOnly refresh cookie with rotation/reuse detection
+- Remember me, logout-all, session list/revoke
+- Password reset/change revokes sessions and bumps authVersion
+- Company invitations + Owner safety rules
+
+Set Resend credentials in `backend/.env`:
+
+```env
+RESEND_API_KEY=your_resend_api_key
+EMAIL_FROM=you@your-verified-domain.com
+FRONTEND_URL=http://localhost:3000
+```

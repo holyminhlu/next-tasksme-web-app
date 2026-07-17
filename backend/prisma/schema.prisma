@@ -8,7 +8,9 @@ datasource db {
 }
 
 enum UserStatus {
+  PENDING_VERIFICATION
   ACTIVE
+  LOCKED
   DISABLED
 }
 
@@ -23,19 +25,40 @@ enum MembershipStatus {
   DISABLED
 }
 
-model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  email        String     @unique
-  passwordHash String
-  fullName     String
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  deletedAt    DateTime?
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
 
-  memberships     CompanyMember[]
-  refreshSessions RefreshSession[]
-  ownedCompanies  Company[]        @relation("CompanyOwner")
+enum OneTimeTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model User {
+  id                 String     @id @default(uuid()) @db.Uuid
+  email              String     @unique
+  passwordHash       String
+  fullName           String
+  status             UserStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
+  passwordChangedAt  DateTime?
+  authVersion        Int        @default(0)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil        DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
+
+  memberships      CompanyMember[]
+  refreshSessions  RefreshSession[]
+  ownedCompanies   Company[]         @relation("CompanyOwner")
+  oneTimeTokens    OneTimeToken[]
+  invitationsSent  CompanyInvitation[] @relation("InvitationInviter")
+  auditLogs        AuditLog[]
 
   @@index([status])
   @@map("users")
@@ -51,9 +74,10 @@ model Company {
   updatedAt DateTime      @updatedAt
   deletedAt DateTime?
 
-  owner   User            @relation("CompanyOwner", fields: [ownerId], references: [id])
-  members CompanyMember[]
-  roles   Role[]
+  owner       User                @relation("CompanyOwner", fields: [ownerId], references: [id])
+  members     CompanyMember[]
+  roles       Role[]
+  invitations CompanyInvitation[]
 
   @@index([ownerId])
   @@index([status])
@@ -70,9 +94,10 @@ model Role {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   members         CompanyMember[]
   rolePermissions RolePermission[]
+  invitations     CompanyInvitation[]
 
   @@unique([companyId, key])
   @@unique([id, companyId])
@@ -126,17 +151,21 @@ model CompanyMember {
 }
 
 model RefreshSession {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @db.Uuid
-  familyId         String    @db.Uuid
-  tokenHash        String    @unique
-  expiresAt        DateTime
-  revokedAt        DateTime?
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @db.Uuid
+  familyId            String    @db.Uuid
+  tokenHash           String    @unique
+  expiresAt           DateTime
+  absoluteExpiresAt   DateTime
+  rememberMe          Boolean   @default(false)
+  revokedAt           DateTime?
+  revokeReason        String?
   replacedByTokenHash String?
-  userAgent        String?
-  ipAddress        String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  lastUsedAt          DateTime?
+  userAgent           String?
+  ipAddress           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -144,4 +173,67 @@ model RefreshSession {
   @@index([familyId])
   @@index([expiresAt])
   @@map("refresh_sessions")
+}
+
+model OneTimeToken {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  type      OneTimeTokenType
+  tokenHash String           @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("one_time_tokens")
+}
+
+model CompanyInvitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  companyId   String           @db.Uuid
+  email       String
+  roleId      String           @db.Uuid
+  tokenHash   String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedById String           @db.Uuid
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role      Role    @relation(fields: [roleId, companyId], references: [id, companyId])
+  invitedBy User    @relation("InvitationInviter", fields: [invitedById], references: [id])
+
+  @@index([companyId, email])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("company_invitations")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @db.Uuid
+  companyId  String?  @db.Uuid
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  requestId  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

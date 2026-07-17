@@ -31,10 +31,13 @@ jobs:
       JWT_ACCESS_SECRET: ci-only-change-me-taskmng-access-secret-32
       CORS_ORIGINS: http://localhost:3000
       APP_URL: http://localhost:4000
+      FRONTEND_URL: http://localhost:3000
       COOKIE_SECURE: "false"
       COOKIE_SAME_SITE: lax
       ENABLE_SWAGGER: "false"
       LOG_LEVEL: silent
+      RESEND_API_KEY: ""
+      EMAIL_FROM: onboarding@resend.dev
 
     steps:
       - name: Checkout
@@ -76,6 +79,10 @@ jobs:
 
       - name: Test backend
         working-directory: backend
+        run: npm test
+
+      - name: Test frontend
+        working-directory: frontend
         run: npm test
 
       - name: Build
