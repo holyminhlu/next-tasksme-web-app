@@ -16,15 +16,18 @@ import {
   MenuLabel,
   Tooltip,
 } from "@/modules/design-system";
+import { isModuleEnabled } from "../navigation";
 import { useShell } from "../ShellProvider";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { UserMenu } from "./UserMenu";
 import styles from "./TopBar.module.css";
 
 function QuickCreateMenu() {
-  const { setQuickCreate } = useShell();
+  const { navContext, setQuickCreate } = useShell();
   const { selectedWorkspace } = useAuth();
   const isOrganization = selectedWorkspace?.type === "ORGANIZATION";
+  const tasksEnabled = isModuleEnabled(navContext, "tasks");
+  const projectsEnabled = isModuleEnabled(navContext, "projects");
 
   return (
     <DropdownMenu
@@ -39,24 +42,28 @@ function QuickCreateMenu() {
       )}
     >
       <MenuLabel>Create</MenuLabel>
-      <Can permission="tasks:create">
-        <MenuItem
-          icon={<Plus size={16} />}
-          description="Capture a task for this workspace"
-          onSelect={() => setQuickCreate("task")}
-        >
-          New task
-        </MenuItem>
-      </Can>
-      <Can permission="projects:create">
-        <MenuItem
-          icon={<FolderKanban size={16} />}
-          description="Organize related work"
-          onSelect={() => setQuickCreate("project")}
-        >
-          New project
-        </MenuItem>
-      </Can>
+      {tasksEnabled && (
+        <Can permission="tasks:create">
+          <MenuItem
+            icon={<Plus size={16} />}
+            description="Capture a task for this workspace"
+            onSelect={() => setQuickCreate("task")}
+          >
+            New task
+          </MenuItem>
+        </Can>
+      )}
+      {projectsEnabled && (
+        <Can permission="projects:create">
+          <MenuItem
+            icon={<FolderKanban size={16} />}
+            description="Organize related work"
+            onSelect={() => setQuickCreate("project")}
+          >
+            New project
+          </MenuItem>
+        </Can>
+      )}
       {isOrganization && (
         <Can permission="members:invite">
           <MenuItem

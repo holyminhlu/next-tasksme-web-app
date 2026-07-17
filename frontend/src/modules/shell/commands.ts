@@ -59,6 +59,7 @@ type ActionCommandMeta = {
   actionId: ShellActionId;
   requiresPermission?: PermissionKey | PermissionKey[];
   workspaceTypes?: WorkspaceType[];
+  requiresModule?: string;
 };
 
 const ACTION_COMMANDS: ActionCommandMeta[] = [
@@ -70,6 +71,7 @@ const ACTION_COMMANDS: ActionCommandMeta[] = [
     icon: Plus,
     actionId: "quick-create-task",
     requiresPermission: "tasks:create",
+    requiresModule: "tasks",
   },
   {
     id: "action-create-project",
@@ -79,6 +81,7 @@ const ACTION_COMMANDS: ActionCommandMeta[] = [
     icon: Plus,
     actionId: "quick-create-project",
     requiresPermission: "projects:create",
+    requiresModule: "projects",
   },
   {
     id: "action-invite-member",
@@ -166,6 +169,7 @@ export function buildCommands(context: NavContext): Command[] {
         section: "main",
         requiresPermission: meta.requiresPermission,
         workspaceTypes: meta.workspaceTypes,
+        requiresModule: meta.requiresModule,
       },
       context,
     ),

@@ -38,6 +38,15 @@ describe("buildCommands", () => {
     expect(memberCommands).not.toContain("action-invite-member");
   });
 
+  it("filters create actions when modules are disabled", () => {
+    const commands = buildCommands(
+      context({ enabledModuleKeys: ["projects"] }),
+    ).map((command) => command.id);
+
+    expect(commands).not.toContain("action-create-task");
+    expect(commands).toContain("action-create-project");
+  });
+
   it("filters action commands by workspace type", () => {
     const personalOwner = buildCommands(
       context({ workspaceType: "PERSONAL" }),

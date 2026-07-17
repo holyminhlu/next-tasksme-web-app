@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { UserPlus } from "lucide-react";
-import { get } from "@/lib/api/client";
 import {
   Can,
   hasPermission,
@@ -15,11 +14,20 @@ import {
   EmptyState,
   ErrorState,
   ForbiddenState,
+  Select,
   Skeleton,
   Table,
+  useToast,
 } from "@/modules/design-system";
+import {
+  listMembers,
+  removeMember,
+  updateMemberRole,
+} from "@/modules/workspaces";
 import { useShell } from "@/modules/shell";
 import styles from "../../app-pages.module.css";
+
+const ASSIGNABLE_ROLES = ["admin", "manager", "member"] as const;
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -27,24 +35,26 @@ function formatDate(value: string): string {
 }
 
 export default function MembersSettingsPage() {
-  const { permissions, selectedWorkspace } = useAuth();
+  const { permissions, profile, selectedWorkspace } = useAuth();
   const { setQuickCreate } = useShell();
+  const { toast } = useToast();
 
   const workspaceId = selectedWorkspace?.id;
   const isPersonal = selectedWorkspace?.type === "PERSONAL";
   const canRead = hasPermission(permissions, "members:read");
+  const canUpdate = hasPermission(permissions, "members:update");
+  const canRemove = hasPermission(permissions, "members:remove");
 
   const [members, setMembers] = useState<WorkspaceMemberSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
 
   const loadMembers = useCallback(async () => {
     if (!workspaceId) {
       return;
     }
 
-    const result = await get<WorkspaceMemberSummary[]>(
-      `/workspaces/${workspaceId}/members`,
-    );
+    const result = await listMembers(workspaceId);
 
     if (!result.success) {
       setError(result.error.message);
@@ -61,6 +71,65 @@ export default function MembersSettingsPage() {
       void loadMembers();
     }
   }, [canRead, isPersonal, loadMembers]);
+
+  async function handleRoleChange(member: WorkspaceMemberSummary, roleKey: string) {
+    if (!workspaceId || member.role.key === roleKey || busyMemberId) {
+      return;
+    }
+
+    setBusyMemberId(member.id);
+    const result = await updateMemberRole(workspaceId, member.id, roleKey);
+    setBusyMemberId(null);
+
+    if (!result.success) {
+      toast({
+        title: "Could not update role",
+        description: result.error.message,
+        tone: "error",
+      });
+      return;
+    }
+
+    await loadMembers();
+    toast({
+      title: "Role updated",
+      description: `${member.user.fullName} is now ${roleKey}.`,
+      tone: "success",
+    });
+  }
+
+  async function handleRemove(member: WorkspaceMemberSummary) {
+    if (!workspaceId || busyMemberId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove ${member.user.fullName} from this workspace?`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyMemberId(member.id);
+    const result = await removeMember(workspaceId, member.id);
+    setBusyMemberId(null);
+
+    if (!result.success) {
+      toast({
+        title: "Could not remove member",
+        description: result.error.message,
+        tone: "error",
+      });
+      return;
+    }
+
+    await loadMembers();
+    toast({
+      title: "Member removed",
+      description: `${member.user.fullName} no longer has access.`,
+      tone: "success",
+    });
+  }
 
   if (isPersonal) {
     return (
@@ -123,35 +192,74 @@ export default function MembersSettingsPage() {
                 <th scope="col">Role</th>
                 <th scope="col">Status</th>
                 <th scope="col">Joined</th>
+                {(canUpdate || canRemove) && <th scope="col">Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {members.map((member) => (
-                <tr key={member.id}>
-                  <td>{member.user.fullName}</td>
-                  <td>{member.user.email}</td>
-                  <td>
-                    <Badge tone={member.role.key === "owner" ? "primary" : "neutral"}>
-                      {member.role.name ?? member.role.key}
-                    </Badge>
-                  </td>
-                  <td>
-                    <Badge tone={member.status === "ACTIVE" ? "success" : "warning"}>
-                      {member.status}
-                    </Badge>
-                  </td>
-                  <td>{formatDate(member.createdAt)}</td>
-                </tr>
-              ))}
+              {members.map((member) => {
+                const isOwner = member.role.key === "owner";
+                const isSelf = member.user.id === profile?.id;
+                const isBusy = busyMemberId === member.id;
+
+                return (
+                  <tr key={member.id}>
+                    <td>{member.user.fullName}</td>
+                    <td>{member.user.email}</td>
+                    <td>
+                      {canUpdate && !isOwner && !isSelf ? (
+                        <Select
+                          aria-label={`Role for ${member.user.fullName}`}
+                          value={member.role.key}
+                          disabled={isBusy}
+                          onChange={(event) =>
+                            void handleRoleChange(member, event.target.value)
+                          }
+                        >
+                          {ASSIGNABLE_ROLES.map((role) => (
+                            <option key={role} value={role}>
+                              {role}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <Badge
+                          tone={isOwner ? "primary" : "neutral"}
+                        >
+                          {member.role.name ?? member.role.key}
+                        </Badge>
+                      )}
+                    </td>
+                    <td>
+                      <Badge
+                        tone={member.status === "ACTIVE" ? "success" : "warning"}
+                      >
+                        {member.status}
+                      </Badge>
+                    </td>
+                    <td>{formatDate(member.createdAt)}</td>
+                    {(canUpdate || canRemove) && (
+                      <td>
+                        {canRemove && !isOwner && !isSelf ? (
+                          <Button
+                            variant="dangerOutline"
+                            size="sm"
+                            loading={isBusy}
+                            onClick={() => void handleRemove(member)}
+                          >
+                            Remove
+                          </Button>
+                        ) : (
+                          <span className={styles.muted}>—</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         )}
       </section>
-
-      <p className={styles.muted}>
-        Role changes and member removal arrive with the member management API
-        in a later phase.
-      </p>
     </div>
   );
 }
