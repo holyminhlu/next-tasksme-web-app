@@ -6,9 +6,9 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   Check,
-  Sparkles,
   UserRound,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth, type WorkspaceType } from "@/modules/auth";
 import * as onboardingService from "../onboarding.service";
 import { onboardingStepUrl } from "../steps";
@@ -62,12 +62,7 @@ export function UsageTypeSelector() {
     <div className={styles.page}>
       <div className={styles.welcomeShell}>
         <header className={styles.welcomeHeader}>
-          <div className={styles.brand}>
-            <span className={styles.brandIcon}>
-              <Sparkles size={20} />
-            </span>
-            <span>Task SME</span>
-          </div>
+          <BrandLogo size="large" priority />
           <span className={styles.setupLabel}>Thiết lập ban đầu</span>
         </header>
 

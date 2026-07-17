@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { STEP_TITLES } from "../constants";
 import type { OnboardingType } from "../onboarding.types";
 import { ONBOARDING_FLOWS, stepProgress } from "../steps";
@@ -27,12 +28,7 @@ export function OnboardingShell({
     <div className={styles.page}>
       <div className={styles.shell}>
         <aside className={styles.onboardingAside}>
-          <div className={styles.brand}>
-            <span className={styles.brandIcon}>
-              <Sparkles size={20} />
-            </span>
-            <span>Task SME</span>
-          </div>
+          <BrandLogo size="default" priority />
 
           <div className={styles.progressWrap}>
             <div className={styles.progressMeta}>

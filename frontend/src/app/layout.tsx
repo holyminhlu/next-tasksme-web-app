@@ -14,8 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TaskMng SME",
+  title: "Task SME",
   description: "Next.js + Express + PostgreSQL task management web app",
+  icons: {
+    icon: "/TaskSME.png",
+    apple: "/TaskSME.png",
+  },
 };
 
 export default function RootLayout({

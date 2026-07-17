@@ -1,0 +1,24 @@
+.logo {
+  position: relative;
+  display: block;
+  width: 132px;
+  height: 88px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.logo img {
+  width: 100%;
+  height: auto;
+  transform: translateY(-12%);
+}
+
+.compact {
+  width: 104px;
+  height: 69px;
+}
+
+.large {
+  width: 160px;
+  height: 106px;
+}
