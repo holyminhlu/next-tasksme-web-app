@@ -214,33 +214,10 @@
   cursor: not-allowed;
 }
 
-.googleMark {
-  font-size: 1rem;
-  font-weight: 800;
-  color: #4285f4;
-}
-
-.microsoftMark {
-  display: grid;
-  grid-template-columns: repeat(2, 7px);
-  grid-template-rows: repeat(2, 7px);
-  gap: 2px;
-}
-
-.microsoftMark i:nth-child(1) {
-  background: #f25022;
-}
-
-.microsoftMark i:nth-child(2) {
-  background: #7fba00;
-}
-
-.microsoftMark i:nth-child(3) {
-  background: #00a4ef;
-}
-
-.microsoftMark i:nth-child(4) {
-  background: #ffb900;
+.providerLogo {
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
 .comingSoon {
