@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import {
-  CheckCircle2,
   LayoutDashboard,
   PencilLine,
   Sparkles,
@@ -99,18 +98,6 @@ export function WorkspaceNameStep() {
             </div>
           </div>
 
-          <aside className={styles.workspacePreview}>
-            <span className={styles.previewLabel}>Xem trước</span>
-            <div className={styles.previewWorkspaceIcon}>
-              <LayoutDashboard size={26} />
-            </div>
-            <strong>{name.trim() || "Tên không gian của bạn"}</strong>
-            <p>Không gian cá nhân</p>
-            <span className={styles.previewReady}>
-              <CheckCircle2 size={15} />
-              Có thể đổi tên bất cứ lúc nào
-            </span>
-          </aside>
         </div>
 
         <StepActions submitLabel="Lưu tên và tiếp tục" submitting={saving} />

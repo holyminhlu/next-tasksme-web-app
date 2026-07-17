@@ -219,10 +219,7 @@
 }
 
 .workspaceNameLayout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr);
-  align-items: stretch;
-  gap: 26px;
+  max-width: 620px;
 }
 
 .workspaceNameEditor {
@@ -314,65 +311,6 @@
   border-color: #2563eb;
   color: #1d4ed8;
   background: #dbeafe;
-}
-
-.workspacePreview {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  min-height: 220px;
-  padding: 24px;
-  border: 1px solid rgba(147, 197, 253, 0.65);
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at 90% 10%, #dbeafe 0%, transparent 42%),
-    rgba(255, 255, 255, 0.76);
-  box-shadow: 0 14px 36px rgba(37, 99, 235, 0.08);
-}
-
-.previewLabel {
-  margin-bottom: 18px;
-  color: #64748b;
-  font-size: 0.72rem;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.previewWorkspaceIcon {
-  width: 52px;
-  height: 52px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 14px;
-  border-radius: 16px;
-  color: #fff;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-}
-
-.workspacePreview strong {
-  max-width: 100%;
-  overflow: hidden;
-  color: #0f172a;
-  font-size: 1rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspacePreview p {
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 0.8rem;
-}
-
-.previewReady {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 22px;
-  color: #16a34a;
-  font-size: 0.72rem;
 }
 
 .optionGrid {
@@ -909,13 +847,6 @@
     font-size: clamp(2.4rem, 10vw, 3.7rem);
   }
 
-  .workspaceNameLayout {
-    grid-template-columns: 1fr;
-  }
-
-  .workspacePreview {
-    min-height: 190px;
-  }
 }
 
 @media (max-width: 620px) {
