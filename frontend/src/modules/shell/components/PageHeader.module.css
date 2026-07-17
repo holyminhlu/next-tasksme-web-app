@@ -1,0 +1,32 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--ds-color-text);
+}
+
+.description {
+  margin-top: 4px;
+  color: var(--ds-color-text-muted);
+  font-size: 0.925rem;
+  line-height: 1.55;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}

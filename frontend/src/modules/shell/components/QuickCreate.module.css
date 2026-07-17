@@ -1,0 +1,40 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-warning-soft);
+  color: var(--ds-color-warning-soft-text);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.noticeIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.errorBanner {
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-danger-soft);
+  color: var(--ds-color-danger-soft-text);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.successBanner {
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-success-soft);
+  color: var(--ds-color-success-soft-text);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}

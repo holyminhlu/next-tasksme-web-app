@@ -1,0 +1,27 @@
+.skeleton {
+  display: block;
+  background: var(--ds-color-surface-sunken);
+  border-radius: var(--ds-radius-sm);
+  animation: ds-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.circle {
+  border-radius: 50%;
+}
+
+@keyframes ds-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    opacity: 0.8;
+  }
+}
