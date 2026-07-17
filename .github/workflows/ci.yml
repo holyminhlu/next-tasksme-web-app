@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: taskmng_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d taskmng_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/taskmng_test?schema=public
+      JWT_ACCESS_SECRET: ci-only-change-me-taskmng-access-secret-32
+      CORS_ORIGINS: http://localhost:3000
+      APP_URL: http://localhost:4000
+      COOKIE_SECURE: "false"
+      COOKIE_SAME_SITE: lax
+      ENABLE_SWAGGER: "false"
+      LOG_LEVEL: silent
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --legacy-peer-deps
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Prisma generate and validate
+        working-directory: backend
+        run: |
+          npx prisma generate
+          npx prisma validate
+          npx prisma migrate deploy
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test backend
+        working-directory: backend
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Security audit
+        run: |
+          npm audit --audit-level=high
+          npm audit --prefix backend --audit-level=high --legacy-peer-deps
+          npm audit --prefix frontend --audit-level=high

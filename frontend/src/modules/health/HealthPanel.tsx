@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL, getHealthStatus } from "./health.service";
-import type { HealthResponse } from "./health.types";
+import {
+  API_URL,
+  getLiveStatus,
+  getReadyStatus,
+  getSwaggerUrl,
+  type HealthLiveResponse,
+  type HealthReadyResponse,
+} from "./health.service";
 import styles from "./health-panel.module.css";
 
 export function HealthPanel() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [live, setLive] = useState<HealthLiveResponse | null>(null);
+  const [ready, setReady] = useState<HealthReadyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -14,9 +21,10 @@ export function HealthPanel() {
   useEffect(() => {
     const controller = new AbortController();
 
-    getHealthStatus(controller.signal)
-      .then((data) => {
-        setHealth(data);
+    Promise.all([getLiveStatus(controller.signal), getReadyStatus(controller.signal)])
+      .then(([liveStatus, readyStatus]) => {
+        setLive(liveStatus);
+        setReady(readyStatus);
         setError(null);
       })
       .catch((err: unknown) => {
@@ -24,11 +32,10 @@ export function HealthPanel() {
           return;
         }
 
-        setHealth(null);
+        setLive(null);
+        setReady(null);
         setError(
-          err instanceof Error
-            ? err.message
-            : "Không thể kết nối tới backend API",
+          err instanceof Error ? err.message : "Không thể kết nối tới backend API",
         );
       })
       .finally(() => setLoading(false));
@@ -38,25 +45,25 @@ export function HealthPanel() {
 
   const overallStatus = error
     ? "offline"
-    : health?.status === "ok"
+    : ready?.status === "ok"
       ? "ok"
-      : health
+      : ready
         ? "degraded"
         : "unknown";
 
   return (
     <div className={styles.page}>
       <main className={styles.main}>
-        <p className={styles.eyebrow}>TaskMng SME</p>
-        <h1>Next.js + Express + PostgreSQL</h1>
+        <p className={styles.eyebrow}>TaskMng SME · Phase 0</p>
+        <h1>Development Status</h1>
         <p className={styles.lead}>
-          Full-stack được tổ chức theo feature module và service. Frontend gọi
-          backend để kiểm tra database <code>taskmng</code>.
+          Trang trạng thái kỹ thuật cho foundation. Không có UI nghiệp vụ end-user ở Phase
+          0. API versioned tại <code>/api/v1</code>.
         </p>
 
         <section className={styles.card}>
           <div className={styles.cardHeader}>
-            <h2>Trạng thái hệ thống</h2>
+            <h2>Health checks</h2>
             <button
               type="button"
               onClick={() => {
@@ -76,7 +83,7 @@ export function HealthPanel() {
             </div>
           )}
 
-          {!loading && health && (
+          {!loading && live && ready && (
             <div className={styles.statusGrid}>
               <div>
                 <span className={styles.label}>Overall</span>
@@ -85,41 +92,49 @@ export function HealthPanel() {
                 </strong>
               </div>
               <div>
-                <span className={styles.label}>Service</span>
-                <strong>{health.service}</strong>
+                <span className={styles.label}>Liveness</span>
+                <strong className={`${styles.badge} ${styles.ok}`}>{live.status}</strong>
               </div>
               <div>
-                <span className={styles.label}>API URL</span>
-                <strong>{API_URL}/api/health</strong>
+                <span className={styles.label}>Readiness</span>
+                <strong
+                  className={`${styles.badge} ${
+                    ready.status === "ok" ? styles.ok : styles.degraded
+                  }`}
+                >
+                  {ready.status}
+                </strong>
               </div>
               <div>
                 <span className={styles.label}>Database</span>
                 <strong
                   className={`${styles.badge} ${
-                    health.database.connected ? styles.ok : styles.degraded
+                    ready.checks.database.status === "up" ? styles.ok : styles.degraded
                   }`}
                 >
-                  {health.database.connected ? "connected" : "disconnected"}
+                  {ready.checks.database.status} · {ready.checks.database.latencyMs}ms
                 </strong>
               </div>
               <div className={styles.full}>
-                <span className={styles.label}>Message</span>
-                <p>{health.database.message}</p>
-              </div>
-              <div className={styles.full}>
-                <span className={styles.label}>Timestamp</span>
-                <p>{health.timestamp}</p>
+                <span className={styles.label}>API base</span>
+                <p>{API_URL}/api/v1</p>
               </div>
             </div>
           )}
         </section>
 
         <section className={styles.stack}>
-          <h2>Module-services architecture</h2>
+          <h2>Developer tools</h2>
           <ul>
-            <li>Frontend module: component, service và type</li>
-            <li>Backend module: route, controller, service và type</li>
-            <li>Infrastructure dùng chung: Prisma, env và middleware</li>
+            <li>
+              Swagger UI:{" "}
+              <a href={getSwaggerUrl()} target="_blank" rel="noreferrer">
+                {getSwaggerUrl()}
+              </a>
+            </li>
+            <li>OpenAPI JSON: {API_URL}/api/openapi.json</li>
+            <li>Architecture: feature modules + services</li>
+            <li>Auth: Bearer access token + HttpOnly refresh cookie</li>
           </ul>
         </section>
       </main>

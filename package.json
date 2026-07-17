@@ -2,12 +2,24 @@
   "name": "next-task-sme-webapp",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
+    "install:all": "npm install && npm install --prefix backend --legacy-peer-deps && npm install --prefix frontend",
     "dev": "concurrently --kill-others-on-fail --names backend,frontend --prefix-colors blue,green \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
     "dev:backend": "npm run dev --prefix backend",
-    "dev:frontend": "npm run dev --prefix frontend"
+    "dev:frontend": "npm run dev --prefix frontend",
+    "lint": "npm run lint --prefix backend && npm run lint --prefix frontend",
+    "format": "prettier --write . && npm run format --prefix backend",
+    "format:check": "prettier --check . && npm run format:check --prefix backend",
+    "typecheck": "npm run typecheck --prefix backend && npm run typecheck --prefix frontend",
+    "test": "npm test --prefix backend",
+    "build": "npm run prisma:generate --prefix backend && npm run build --prefix backend && npm run build --prefix frontend",
+    "start": "concurrently --names backend,frontend --prefix-colors blue,green \"npm run start --prefix backend\" \"npm run start --prefix frontend\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "prettier": "^3.9.5"
   }
 }

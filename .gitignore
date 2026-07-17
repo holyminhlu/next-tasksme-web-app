@@ -4,14 +4,20 @@ node_modules/
 # Environment
 .env
 .env.local
+.env.docker
 .env.*.local
+!.env.example
+!**/.env.example
+!.env.docker.example
 
 # Build outputs
 dist/
+coverage/
 frontend/.next/
 frontend/out/
 backend/dist/
 backend/generated/
+backend/coverage/
 
 # Logs and caches
 npm-debug.log*

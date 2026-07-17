@@ -1,18 +1,101 @@
-import dotenv from "dotenv";
+import { config as loadDotenv } from "dotenv";
+import { z } from "zod";
 
-dotenv.config();
+loadDotenv();
 
-function required(name: string, fallback?: string): string {
-  const value = process.env[name] ?? fallback;
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
+const booleanFromEnv = z.union([z.boolean(), z.string()]).transform((value) => {
+  if (typeof value === "boolean") {
+    return value;
   }
-  return value;
+
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+});
+
+const envSchema = z.object({
+  NODE_ENV: z
+    .enum(["development", "test", "staging", "production"])
+    .default("development"),
+  PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+  APP_NAME: z.string().min(1).default("taskmng-backend"),
+  APP_URL: z.string().url().default("http://localhost:4000"),
+  CORS_ORIGINS: z
+    .string()
+    .min(1)
+    .default("http://localhost:3000")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ),
+  DATABASE_URL: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith("postgresql"), {
+      message: "DATABASE_URL must be a PostgreSQL connection string",
+    }),
+  JWT_ACCESS_SECRET: z.string().min(32),
+  JWT_ACCESS_EXPIRES_IN: z.string().min(1).default("15m"),
+  REFRESH_TOKEN_EXPIRES_DAYS: z.coerce.number().int().positive().default(14),
+  COOKIE_SECURE: booleanFromEnv.default(false),
+  COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).default("lax"),
+  COOKIE_DOMAIN: z.string().optional(),
+  BODY_SIZE_LIMIT: z.string().min(1).default("100kb"),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  LOG_LEVEL: z
+    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+    .default("info"),
+  ENABLE_SWAGGER: booleanFromEnv.optional(),
+});
+
+export type Env = z.infer<typeof envSchema> & {
+  isProduction: boolean;
+  isTest: boolean;
+  isDevelopment: boolean;
+  enableSwagger: boolean;
+};
+
+let cachedEnv: Env | null = null;
+
+export function loadEnv(overrides?: Record<string, string | undefined>): Env {
+  const parsed = envSchema.safeParse({
+    ...process.env,
+    ...overrides,
+  });
+
+  if (!parsed.success) {
+    const details = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    throw new Error(`Invalid environment configuration: ${details}`);
+  }
+
+  const data = parsed.data;
+  const env: Env = {
+    ...data,
+    isProduction: data.NODE_ENV === "production",
+    isTest: data.NODE_ENV === "test",
+    isDevelopment: data.NODE_ENV === "development",
+    enableSwagger:
+      data.ENABLE_SWAGGER ??
+      (data.NODE_ENV === "development" || data.NODE_ENV === "test"),
+  };
+
+  cachedEnv = env;
+  return env;
 }
 
-export const env = {
-  port: Number(process.env.PORT ?? 4000),
-  nodeEnv: process.env.NODE_ENV ?? "development",
-  corsOrigin: required("CORS_ORIGIN", "http://localhost:3000"),
-  databaseUrl: required("DATABASE_URL"),
-};
+export function getEnv(): Env {
+  if (!cachedEnv) {
+    return loadEnv();
+  }
+
+  return cachedEnv;
+}
+
+export function resetEnvCache(): void {
+  cachedEnv = null;
+}

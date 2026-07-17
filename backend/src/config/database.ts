@@ -1,18 +1,22 @@
-import { PrismaClient } from "../../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { env } from "./env";
+import { PrismaClient } from "../../generated/prisma/client.js";
+import { getEnv } from "./env.js";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
 };
 
-function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: env.databaseUrl });
+export function createPrismaClient(databaseUrl = getEnv().DATABASE_URL): PrismaClient {
+  const adapter = new PrismaPg({ connectionString: databaseUrl });
   return new PrismaClient({ adapter });
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-if (env.nodeEnv !== "production") {
+if (!getEnv().isProduction) {
   globalForPrisma.prisma = prisma;
+}
+
+export async function disconnectPrisma(): Promise<void> {
+  await prisma.$disconnect();
 }

@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/generated
+**/.env
+**/.env.local
+**/.env.*.local
+.git
+*.md
+TrienKhaiFeatures.docx
+~$*.docx

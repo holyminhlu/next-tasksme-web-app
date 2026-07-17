@@ -1,29 +1,45 @@
-import { prisma } from "../../config/database";
-import type { HealthStatus } from "./health.types";
+import { prisma } from "../../config/database.js";
+import { getEnv } from "../../config/env.js";
+import { logger } from "../../config/logger.js";
 
 export class HealthService {
-  async getStatus(): Promise<HealthStatus> {
+  getLiveness() {
+    return {
+      status: "ok" as const,
+      service: getEnv().APP_NAME,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  async getReadiness() {
+    const started = Date.now();
+
     try {
       await prisma.$queryRaw`SELECT 1`;
 
       return {
-        status: "ok",
-        service: "taskmng-backend",
+        status: "ok" as const,
+        service: getEnv().APP_NAME,
         timestamp: new Date().toISOString(),
-        database: {
-          connected: true,
-          message: "Connected to PostgreSQL database taskmng",
+        checks: {
+          database: {
+            status: "up" as const,
+            latencyMs: Date.now() - started,
+          },
         },
       };
     } catch (error) {
+      logger.error({ err: error }, "Readiness database check failed");
+
       return {
-        status: "degraded",
-        service: "taskmng-backend",
+        status: "degraded" as const,
+        service: getEnv().APP_NAME,
         timestamp: new Date().toISOString(),
-        database: {
-          connected: false,
-          message:
-            error instanceof Error ? error.message : "Unknown database error",
+        checks: {
+          database: {
+            status: "down" as const,
+            latencyMs: Date.now() - started,
+          },
         },
       };
     }

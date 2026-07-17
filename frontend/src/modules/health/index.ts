@@ -1,3 +1,3 @@
 export { HealthPanel } from "./HealthPanel";
-export { getHealthStatus } from "./health.service";
-export type { HealthResponse } from "./health.types";
+export { getLiveStatus, getReadyStatus, getSwaggerUrl } from "./health.service";
+export type { HealthLiveResponse, HealthReadyResponse } from "./health.types";

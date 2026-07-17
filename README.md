@@ -1,146 +1,112 @@
-# next-tasksme-web-app
+# next-task-sme-webapp
 
-Ứng dụng quản lý task SME theo kiến trúc full-stack **module-services**:
+Task Management SME — Phase 0 Foundation.
+
+Tech stack:
 
 - Frontend: Next.js + React + TypeScript
-- Backend: Node.js + Express + TypeScript
-- Database: PostgreSQL (`taskmng`) + Prisma ORM
+- Backend: Node.js + Express + TypeScript + Prisma
+- Database: PostgreSQL (`taskmng`)
+- Architecture: feature modules + services
 
-## Kiến trúc
+## Branch và commit convention
 
-Mã nguồn được nhóm theo feature thay vì gom toàn bộ controller hoặc service của
-các nghiệp vụ vào một thư mục chung.
+- Feature: `feat/<name>`
+- Fix: `fix/<name>`
+- Commits: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`)
+- Merge vào `main` chỉ khi CI pass
 
-```text
-next-task-sme-webapp/
-├── frontend/
-│   └── src/
-│       ├── app/                     # Next.js routing/composition
-│       └── modules/
-│           └── health/
-│               ├── HealthPanel.tsx
-│               ├── health.service.ts
-│               ├── health.types.ts
-│               └── index.ts
-├── backend/
-│   ├── prisma/                      # Schema và migrations
-│   └── src/
-│       ├── config/                  # Hạ tầng dùng chung
-│       ├── middleware/              # Middleware dùng chung
-│       └── modules/
-│           └── health/
-│               ├── health.routes.ts
-│               ├── health.controller.ts
-│               ├── health.service.ts
-│               └── health.types.ts
-└── README.md
-```
+## Yêu cầu
 
-Luồng xử lý:
-
-```text
-Frontend page
-  -> Feature component
-  -> Frontend service
-  -> Express module route
-  -> Controller
-  -> Backend service
-  -> Prisma
-  -> PostgreSQL
-```
-
-Khi thêm feature như `tasks`, `users` hoặc `auth`, tạo module tương ứng ở cả
-`frontend/src/modules` và `backend/src/modules`. Chỉ export public API của
-frontend module qua `index.ts`; backend đăng ký router tại
-`backend/src/modules/index.ts`.
-
-## Yêu cầu môi trường
-
-- Node.js 20+
+- Node.js `>=20.19` (khuyến nghị theo `.nvmrc`: 22.12.0)
 - npm 10+
-- PostgreSQL chạy tại `localhost:5432`
-- Database: `taskmng`
+- PostgreSQL 16+
+- Docker Desktop (cho Compose), daemon phải đang chạy
 
-Tạo database bằng `psql` hoặc pgAdmin:
+## Cài đặt nhanh
+
+```bash
+npm run install:all
+copy backend\.env.example backend\.env
+copy backend\.env.test.example backend\.env.test
+copy frontend\.env.example frontend\.env.local
+```
+
+Tạo database:
 
 ```sql
 CREATE DATABASE taskmng;
+CREATE DATABASE taskmng_test;
 ```
 
-## Cấu hình
-
-Backend (`backend/.env`):
-
-```env
-PORT=4000
-NODE_ENV=development
-CORS_ORIGIN=http://localhost:3000
-DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/taskmng?schema=public"
-```
-
-Frontend (`frontend/.env.local`):
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:4000
-```
-
-## Cài đặt và chạy
-
-Lần đầu, cài dependency cho cả ba cấp:
-
-```bash
-npm install
-npm install --prefix backend
-npm install --prefix frontend
-npm run prisma:generate --prefix backend
-```
-
-Chạy đồng thời backend và frontend từ thư mục gốc:
-
-```bash
-npm run dev
-```
-
-Nhấn `Ctrl+C` để dừng cả hai tiến trình. Log được gắn prefix `backend` và
-`frontend` để dễ phân biệt.
-
-Nếu cần chạy riêng từng ứng dụng:
-
-```bash
-# Backend
-npm run dev:backend
-
-# Frontend
-npm run dev:frontend
-```
-
-Hoặc chạy trực tiếp trong từng thư mục:
+Cập nhật `DATABASE_URL` và `JWT_ACCESS_SECRET` trong `backend/.env`, rồi:
 
 ```bash
 cd backend
-npm install
-npm run prisma:generate
+npx prisma generate
+npx prisma migrate deploy
+npx prisma db seed
+cd ..
 npm run dev
 ```
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-- Frontend: http://localhost:3000
+- Frontend status page: http://localhost:3000
 - Backend: http://localhost:4000
-- Health API: http://localhost:4000/api/health
+- Health live: http://localhost:4000/api/v1/health/live
+- Health ready: http://localhost:4000/api/v1/health/ready
+- Swagger: http://localhost:4000/api/docs
 
-## Kiểm tra
+## Kiến trúc
+
+```text
+frontend/src/modules/<feature>/
+backend/src/modules/<feature>/
+backend/src/config/          # env, db, logger
+backend/src/middleware/      # auth, tenant, permission, validate, errors
+backend/src/lib/             # errors, tokens, password, response
+```
+
+## Auth model
+
+- Register tạo User + Company + system roles + Owner membership trong một transaction
+- Access token: JWT Bearer ngắn hạn
+- Refresh token: opaque, hash trong DB, HttpOnly cookie, rotation + reuse detection
+- Roles theo company: Owner / Admin / Manager / Member
+- Permission catalog seed toàn cục
+
+## Migration production
 
 ```bash
 cd backend
-npm run typecheck
-npm run build
+npm run prisma:deploy
+npm run prisma:seed
+```
 
-cd ../frontend
+## Kiểm tra chất lượng
+
+```bash
 npm run lint
+npm run typecheck
+npm test
 npm run build
 ```
+
+## Docker Compose
+
+```bash
+copy .env.docker.example .env.docker
+docker compose up --build
+```
+
+Cập nhật password/secret trong `.env.docker` trước khi chạy. PostgreSQL chỉ dùng
+trong network nội bộ Compose.
+
+## Branch protection
+
+1. Settings → Branches → Add rule for `main`
+2. Require status checks to pass: `quality`
+3. Require branches to be up to date before merging
+
+## Postman
+
+`postman/TaskMng-Phase0.postman_collection.json`
