@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PartyPopper } from "lucide-react";
 import { ROLE_LABELS } from "../../constants";
 import { useOnboarding } from "../../OnboardingProvider";
 import { OnboardingShell } from "../OnboardingShell";
@@ -35,8 +36,8 @@ export function CompleteStep() {
         {error && <div className={styles.error}>{error}</div>}
 
         <div className={styles.celebrate}>
-          <span className={styles.celebrateIcon} aria-hidden>
-            🎉
+          <span className={styles.celebrateIcon} aria-hidden="true">
+            <PartyPopper size={42} />
           </span>
         </div>
 
