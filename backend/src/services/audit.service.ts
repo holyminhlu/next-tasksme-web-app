@@ -4,7 +4,7 @@ import { prisma } from "../config/database.js";
 type AuditInput = {
   action: string;
   userId?: string | null;
-  companyId?: string | null;
+  workspaceId?: string | null;
   entityType?: string;
   entityId?: string;
   metadata?: Prisma.InputJsonValue;
@@ -18,7 +18,7 @@ export async function writeAuditLog(input: AuditInput): Promise<void> {
     data: {
       action: input.action,
       userId: input.userId ?? undefined,
-      companyId: input.companyId ?? undefined,
+      workspaceId: input.workspaceId ?? undefined,
       entityType: input.entityType,
       entityId: input.entityId,
       metadata: input.metadata,

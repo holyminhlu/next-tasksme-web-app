@@ -10,7 +10,6 @@ describe("validation and error envelope", () => {
       password: "short",
       confirmPassword: "different",
       fullName: "A",
-      companyName: "B",
     });
 
     expect(response.status).toBe(400);

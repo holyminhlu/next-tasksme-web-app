@@ -11,7 +11,6 @@ import type {
   AuthProfile,
   AuthSession,
   ChangePasswordInput,
-  CompanySummary,
   ForgotPasswordInput,
   InvitationPreview,
   LoginInput,
@@ -20,8 +19,9 @@ import type {
   RegisterResponse,
   ResendVerificationInput,
   ResetPasswordInput,
-  SelectCompanyInput,
+  SelectWorkspaceInput,
   VerifyEmailInput,
+  WorkspaceSummary,
 } from "./auth.types";
 
 export async function register(input: RegisterInput) {
@@ -75,12 +75,12 @@ export async function me() {
   return get<AuthProfile>("/auth/me");
 }
 
-export async function listCompanies() {
-  return get<CompanySummary[]>("/me/companies");
+export async function listWorkspaces() {
+  return get<WorkspaceSummary[]>("/me/workspaces");
 }
 
-export async function selectCompany(input: SelectCompanyInput) {
-  return post<CompanySummary>("/auth/select-company", input);
+export async function selectWorkspace(input: SelectWorkspaceInput) {
+  return post<WorkspaceSummary>("/auth/select-workspace", input);
 }
 
 export async function verifyEmail(input: VerifyEmailInput) {

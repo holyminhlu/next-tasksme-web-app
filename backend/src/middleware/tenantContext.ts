@@ -12,18 +12,18 @@ export async function tenantContext(
       throw new UnauthorizedError();
     }
 
-    const companyId = req.params.companyId;
-    if (!companyId || typeof companyId !== "string") {
-      throw new ValidationError("companyId route parameter is required");
+    const workspaceId = req.params.workspaceId;
+    if (!workspaceId || typeof workspaceId !== "string") {
+      throw new ValidationError("workspaceId route parameter is required");
     }
 
-    const membership = await prisma.companyMember.findFirst({
+    const membership = await prisma.workspaceMember.findFirst({
       where: {
-        companyId,
+        workspaceId,
         userId: req.user.id,
         deletedAt: null,
         status: "ACTIVE",
-        company: {
+        workspace: {
           deletedAt: null,
           status: "ACTIVE",
         },
@@ -42,16 +42,18 @@ export async function tenantContext(
     });
 
     if (!membership) {
-      throw new ForbiddenError("You are not a member of this company");
+      throw new ForbiddenError("You are not a member of this workspace");
     }
 
     req.tenant = {
-      companyId: membership.companyId,
+      workspaceId: membership.workspaceId,
       membershipId: membership.id,
       roleId: membership.roleId,
       roleKey: membership.role.key,
       status: membership.status,
-      permissions: membership.role.rolePermissions.map((item) => item.permission.key),
+      permissions: membership.role.rolePermissions.map(
+        (item) => item.permission.key,
+      ),
     };
 
     next();

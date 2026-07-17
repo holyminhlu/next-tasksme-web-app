@@ -23,13 +23,17 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.auditLog.deleteMany();
+  await prisma.task.deleteMany();
+  await prisma.project.deleteMany();
+  await prisma.workspaceModule.deleteMany();
+  await prisma.workspaceOnboarding.deleteMany();
   await prisma.oneTimeToken.deleteMany();
-  await prisma.companyInvitation.deleteMany();
+  await prisma.workspaceInvitation.deleteMany();
   await prisma.refreshSession.deleteMany();
-  await prisma.companyMember.deleteMany();
+  await prisma.workspaceMember.deleteMany();
   await prisma.rolePermission.deleteMany();
   await prisma.role.deleteMany();
-  await prisma.company.deleteMany();
+  await prisma.workspace.deleteMany();
   await prisma.user.deleteMany();
 });
 

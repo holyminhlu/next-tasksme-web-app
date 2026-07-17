@@ -9,13 +9,15 @@ import {
   verifyLatestEmail,
 } from "./helpers.js";
 
-describe("authentication phase 1", () => {
-  it("registers pending user, hashes password, and requires verification before login", async () => {
+describe("authentication phase 2", () => {
+  it("registers pending user without creating a workspace", async () => {
     const { app, payload, response } = await registerUser();
 
     expect(response.status).toBe(201);
     expect(response.body.data.requiresEmailVerification).toBe(true);
     expect(response.body.data.accessToken).toBeUndefined();
+    expect(response.body.data.workspace).toBeUndefined();
+    expect(response.body.data.company).toBeUndefined();
 
     const user = await prisma.user.findUnique({
       where: { email: payload.email },
@@ -24,11 +26,24 @@ describe("authentication phase 1", () => {
     expect(user?.passwordHash).not.toBe(payload.password);
     expect(user?.passwordHash.startsWith("$argon2")).toBe(true);
 
+    const workspaceCount = await prisma.workspace.count();
+    expect(workspaceCount).toBe(0);
+
     const loginBeforeVerify = await request(app).post("/api/v1/auth/login").send({
       email: payload.email,
       password: payload.password,
     });
     expect(loginBeforeVerify.status).toBe(403);
+  });
+
+  it("rejects register payloads that still send companyName as unknown extras are ignored but missing fields fail", async () => {
+    const app = buildApp();
+    const response = await request(app).post("/api/v1/auth/register").send({
+      email: `no-name-${Date.now()}@example.com`,
+      password: "Password123",
+      confirmPassword: "Password123",
+    });
+    expect(response.status).toBe(400);
   });
 
   it("normalizes email and blocks duplicates", async () => {
@@ -47,7 +62,6 @@ describe("authentication phase 1", () => {
     });
     expect(token).toBeTruthy();
 
-    // Use a known token path by rewriting hash for test convenience.
     const raw = "verify-token-for-test";
     await prisma.oneTimeToken.update({
       where: { id: token!.id },

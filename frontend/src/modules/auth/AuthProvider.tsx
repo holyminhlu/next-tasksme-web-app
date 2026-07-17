@@ -14,21 +14,21 @@ import type {
   AuthProfile,
   AuthStatus,
   AuthUser,
-  CompanySummary,
   LoginInput,
   PermissionKey,
   RegisterInput,
+  WorkspaceSummary,
 } from "./auth.types";
 import { permissionsForRole } from "./permissions";
 
-const SELECTED_COMPANY_KEY = "taskmng:selected-company-id";
+const SELECTED_WORKSPACE_KEY = "taskmng:selected-workspace-id";
 
 type AuthContextValue = {
   status: AuthStatus;
   user: AuthUser | null;
   profile: AuthProfile | null;
-  companies: CompanySummary[];
-  selectedCompany: CompanySummary | null;
+  workspaces: WorkspaceSummary[];
+  selectedWorkspace: WorkspaceSummary | null;
   permissions: PermissionKey[];
   error: string | null;
   login: (input: LoginInput) => Promise<{ ok: boolean; message?: string }>;
@@ -38,51 +38,58 @@ type AuthContextValue = {
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  selectCompany: (companyId: string) => Promise<{ ok: boolean; message?: string }>;
+  selectWorkspace: (
+    workspaceId: string,
+  ) => Promise<{ ok: boolean; message?: string }>;
   markSessionExpired: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function readStoredCompanyId(): string | null {
+function readStoredWorkspaceId(): string | null {
   if (typeof window === "undefined") {
     return null;
   }
 
-  return window.localStorage.getItem(SELECTED_COMPANY_KEY);
+  return window.localStorage.getItem(SELECTED_WORKSPACE_KEY);
 }
 
-function writeStoredCompanyId(companyId: string | null) {
+function writeStoredWorkspaceId(workspaceId: string | null) {
   if (typeof window === "undefined") {
     return;
   }
 
-  if (companyId) {
-    window.localStorage.setItem(SELECTED_COMPANY_KEY, companyId);
+  if (workspaceId) {
+    window.localStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId);
   } else {
-    window.localStorage.removeItem(SELECTED_COMPANY_KEY);
+    window.localStorage.removeItem(SELECTED_WORKSPACE_KEY);
   }
 }
 
-function resolveSelectedCompany(
-  companies: CompanySummary[],
-): CompanySummary | null {
-  if (companies.length === 0) {
+function resolveSelectedWorkspace(
+  workspaces: WorkspaceSummary[],
+  lastActiveWorkspaceId: string | null,
+): WorkspaceSummary | null {
+  if (workspaces.length === 0) {
     return null;
   }
 
-  const storedId = readStoredCompanyId();
+  const storedId = readStoredWorkspaceId();
   const stored = storedId
-    ? companies.find((company) => company.id === storedId)
+    ? workspaces.find((workspace) => workspace.id === storedId)
     : undefined;
 
   if (stored) {
     return stored;
   }
 
-  if (companies.length === 1) {
-    writeStoredCompanyId(companies[0]!.id);
-    return companies[0]!;
+  const lastActive = lastActiveWorkspaceId
+    ? workspaces.find((workspace) => workspace.id === lastActiveWorkspaceId)
+    : undefined;
+
+  if (lastActive) {
+    writeStoredWorkspaceId(lastActive.id);
+    return lastActive;
   }
 
   return null;
@@ -91,22 +98,24 @@ function resolveSelectedCompany(
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [profile, setProfile] = useState<AuthProfile | null>(null);
-  const [selectedCompany, setSelectedCompany] = useState<CompanySummary | null>(
-    null,
-  );
+  const [selectedWorkspace, setSelectedWorkspace] =
+    useState<WorkspaceSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const applyProfile = useCallback((nextProfile: AuthProfile | null) => {
     setProfile(nextProfile);
 
     if (!nextProfile) {
-      setSelectedCompany(null);
-      writeStoredCompanyId(null);
+      setSelectedWorkspace(null);
+      writeStoredWorkspaceId(null);
       return;
     }
 
-    const nextSelected = resolveSelectedCompany(nextProfile.companies);
-    setSelectedCompany(nextSelected);
+    const nextSelected = resolveSelectedWorkspace(
+      nextProfile.workspaces,
+      nextProfile.lastActiveWorkspaceId,
+    );
+    setSelectedWorkspace(nextSelected);
   }, []);
 
   const bootstrap = useCallback(async () => {
@@ -117,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!refreshResult.success) {
       setProfile(null);
-      setSelectedCompany(null);
+      setSelectedWorkspace(null);
       setStatus("unauthenticated");
       return;
     }
@@ -127,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!meResult.success) {
       await authService.logout();
       setProfile(null);
-      setSelectedCompany(null);
+      setSelectedWorkspace(null);
       setStatus(
         meResult.error.code === "UNAUTHORIZED"
           ? "session-expired"
@@ -187,16 +196,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await authService.logout();
     setProfile(null);
-    setSelectedCompany(null);
-    writeStoredCompanyId(null);
+    setSelectedWorkspace(null);
+    writeStoredWorkspaceId(null);
     setStatus("unauthenticated");
   }, []);
 
   const logoutAll = useCallback(async () => {
     await authService.logoutAll();
     setProfile(null);
-    setSelectedCompany(null);
-    writeStoredCompanyId(null);
+    setSelectedWorkspace(null);
+    writeStoredWorkspaceId(null);
     setStatus("unauthenticated");
   }, []);
 
@@ -214,16 +223,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("authenticated");
   }, [applyProfile]);
 
-  const selectCompany = useCallback(
-    async (companyId: string) => {
-      const result = await authService.selectCompany({ companyId });
+  const selectWorkspace = useCallback(
+    async (workspaceId: string) => {
+      const result = await authService.selectWorkspace({ workspaceId });
 
       if (!result.success) {
         return { ok: false, message: result.error.message };
       }
 
-      writeStoredCompanyId(companyId);
-      setSelectedCompany(result.data);
+      writeStoredWorkspaceId(workspaceId);
+      setSelectedWorkspace(result.data);
       await refreshProfile();
       return { ok: true };
     },
@@ -232,17 +241,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const markSessionExpired = useCallback(() => {
     setProfile(null);
-    setSelectedCompany(null);
-    writeStoredCompanyId(null);
+    setSelectedWorkspace(null);
+    writeStoredWorkspaceId(null);
     setStatus("session-expired");
   }, []);
 
   const permissions = useMemo(
     () =>
-      selectedCompany
-        ? permissionsForRole(selectedCompany.roleKey)
+      selectedWorkspace
+        ? permissionsForRole(selectedWorkspace.roleKey)
         : [],
-    [selectedCompany],
+    [selectedWorkspace],
   );
 
   const value = useMemo<AuthContextValue>(
@@ -250,8 +259,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       user: profile,
       profile,
-      companies: profile?.companies ?? [],
-      selectedCompany,
+      workspaces: profile?.workspaces ?? [],
+      selectedWorkspace,
       permissions,
       error,
       login,
@@ -259,13 +268,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       logoutAll,
       refreshProfile,
-      selectCompany,
+      selectWorkspace,
       markSessionExpired,
     }),
     [
       status,
       profile,
-      selectedCompany,
+      selectedWorkspace,
       permissions,
       error,
       login,
@@ -273,7 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       logoutAll,
       refreshProfile,
-      selectCompany,
+      selectWorkspace,
       markSessionExpired,
     ],
   );

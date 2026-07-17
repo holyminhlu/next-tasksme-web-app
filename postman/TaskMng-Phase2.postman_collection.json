@@ -1,0 +1,253 @@
+{
+  "info": {
+    "name": "TaskMng Phase 2 Workspace Onboarding",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (minimal)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner@example.com\",\n  \"password\": \"Password123\",\n  \"confirmPassword\": \"Password123\",\n  \"fullName\": \"Owner User\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register"
+          }
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verificationToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/verify-email"
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner@example.com\",\n  \"password\": \"Password123\",\n  \"rememberMe\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        },
+        {
+          "name": "List Workspaces",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/me/workspaces"
+          }
+        },
+        {
+          "name": "Select Workspace",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workspaceId\": \"{{workspaceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/select-workspace"
+          }
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Origin", "value": "http://localhost:3000" }],
+            "url": "{{baseUrl}}/api/v1/auth/refresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workspaces",
+      "item": [
+        {
+          "name": "Create Personal Workspace",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"PERSONAL\",\n  \"name\": \"Không gian của Minh\",\n  \"usagePurpose\": \"FREELANCE\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workspaces"
+          }
+        },
+        {
+          "name": "Create Organization Workspace",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ORGANIZATION\",\n  \"name\": \"Acme SME\",\n  \"industryCode\": \"INFORMATION_TECHNOLOGY\",\n  \"companySize\": \"6_20\",\n  \"timezone\": \"Asia/Ho_Chi_Minh\",\n  \"locale\": \"vi\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workspaces"
+          }
+        },
+        {
+          "name": "Get Workspace",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workspaces/{{workspaceId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Onboarding",
+      "item": [
+        {
+          "name": "Get Onboarding",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workspaces/{{workspaceId}}/onboarding"
+          }
+        },
+        {
+          "name": "Update Onboarding Step",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentStep\": \"modules\",\n  \"completedSteps\": [\"workspace_name\", \"usage_purpose\", \"template\"]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workspaces/{{workspaceId}}/onboarding"
+          }
+        },
+        {
+          "name": "Apply Module Preset",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"preset\": \"PERSONAL_SIMPLE\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workspaces/{{workspaceId}}/modules/presets"
+          }
+        },
+        {
+          "name": "Create First Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Đồ án tốt nghiệp\",\n  \"tasks\": [\n    { \"title\": \"Hoàn thiện database\", \"priority\": \"HIGH\" },\n    { \"title\": \"Viết API đăng nhập\", \"priority\": \"MEDIUM\" }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workspaces/{{workspaceId}}/onboarding/first-project"
+          }
+        },
+        {
+          "name": "Complete Onboarding",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/workspaces/{{workspaceId}}/onboarding/complete"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invitations",
+      "item": [
+        {
+          "name": "Invite Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"member@example.com\",\n  \"roleKey\": \"member\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/workspaces/{{workspaceId}}/invitations"
+          }
+        },
+        {
+          "name": "Preview Invitation",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/invitations/preview?token={{invitationToken}}"
+          }
+        },
+        {
+          "name": "Accept Invitation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{invitationToken}}\",\n  \"fullName\": \"Invited Member\",\n  \"password\": \"Password123\",\n  \"confirmPassword\": \"Password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/invitations/accept"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "workspaceId", "value": "" },
+    { "key": "verificationToken", "value": "" },
+    { "key": "invitationToken", "value": "" }
+  ]
+}

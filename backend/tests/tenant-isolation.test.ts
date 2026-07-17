@@ -1,41 +1,45 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { prisma } from "../src/config/database.js";
-import { registerAndLogin } from "./helpers.js";
+import { registerLoginAndCreateWorkspace } from "./helpers.js";
 
 describe("tenant isolation and owner rules", () => {
-  it("allows members to read their own company and blocks cross-company access", async () => {
-    const companyA = await registerAndLogin({
+  it("allows members to read their own workspace and blocks cross-workspace access", async () => {
+    const workspaceA = await registerLoginAndCreateWorkspace({
       email: `owner-a-${Date.now()}@example.com`,
-      companyName: `Company A ${Date.now()}`,
+      name: `Workspace A ${Date.now()}`,
+      type: "ORGANIZATION",
     });
-    const companyB = await registerAndLogin({
+    const workspaceB = await registerLoginAndCreateWorkspace({
       email: `owner-b-${Date.now()}@example.com`,
-      companyName: `Company B ${Date.now()}`,
+      name: `Workspace B ${Date.now()}`,
+      type: "ORGANIZATION",
     });
 
-    const own = await request(companyA.app)
-      .get(`/api/v1/companies/${companyA.companyId}`)
-      .set("Authorization", `Bearer ${companyA.accessToken}`);
+    const own = await request(workspaceA.app)
+      .get(`/api/v1/workspaces/${workspaceA.workspaceId}`)
+      .set("Authorization", `Bearer ${workspaceA.accessToken}`);
     expect(own.status).toBe(200);
 
-    const cross = await request(companyA.app)
-      .get(`/api/v1/companies/${companyB.companyId}`)
-      .set("Authorization", `Bearer ${companyA.accessToken}`);
+    const cross = await request(workspaceA.app)
+      .get(`/api/v1/workspaces/${workspaceB.workspaceId}`)
+      .set("Authorization", `Bearer ${workspaceA.accessToken}`);
     expect(cross.status).toBe(403);
   });
 
   it("prevents demoting the last owner", async () => {
-    const owner = await registerAndLogin();
-    const membership = await prisma.companyMember.findFirst({
+    const owner = await registerLoginAndCreateWorkspace();
+    const membership = await prisma.workspaceMember.findFirst({
       where: {
-        companyId: owner.companyId!,
+        workspaceId: owner.workspaceId!,
         userId: owner.userId!,
       },
     });
 
     const response = await request(owner.app)
-      .patch(`/api/v1/companies/${owner.companyId}/members/${membership!.id}`)
+      .patch(
+        `/api/v1/workspaces/${owner.workspaceId}/members/${membership!.id}`,
+      )
       .set("Authorization", `Bearer ${owner.accessToken}`)
       .send({ roleKey: "admin" });
 
@@ -44,9 +48,9 @@ describe("tenant isolation and owner rules", () => {
   });
 
   it("lists members when permission is granted", async () => {
-    const owner = await registerAndLogin();
+    const owner = await registerLoginAndCreateWorkspace();
     const response = await request(owner.app)
-      .get(`/api/v1/companies/${owner.companyId}/members`)
+      .get(`/api/v1/workspaces/${owner.workspaceId}/members`)
       .set("Authorization", `Bearer ${owner.accessToken}`);
 
     expect(response.status).toBe(200);
@@ -54,29 +58,30 @@ describe("tenant isolation and owner rules", () => {
   });
 
   it("invites a member and accepts invitation for a new user", async () => {
-    const owner = await registerAndLogin();
+    const owner = await registerLoginAndCreateWorkspace({
+      type: "ORGANIZATION",
+    });
     const inviteEmail = `member-${Date.now()}@example.com`;
 
     const invite = await request(owner.app)
-      .post(`/api/v1/companies/${owner.companyId}/invitations`)
+      .post(`/api/v1/workspaces/${owner.workspaceId}/invitations`)
       .set("Authorization", `Bearer ${owner.accessToken}`)
       .send({ email: inviteEmail, roleKey: "member" });
 
     expect(invite.status).toBe(201);
 
-    const invitation = await prisma.companyInvitation.findFirst({
+    const invitation = await prisma.workspaceInvitation.findFirst({
       where: {
-        companyId: owner.companyId!,
+        workspaceId: owner.workspaceId!,
         email: inviteEmail,
         status: "PENDING",
       },
     });
     expect(invitation).toBeTruthy();
 
-    // Replace hash with a known token for accept flow.
     const raw = "invite-token-for-test";
     const { hashToken } = await import("../src/lib/tokens.js");
-    await prisma.companyInvitation.update({
+    await prisma.workspaceInvitation.update({
       where: { id: invitation!.id },
       data: { tokenHash: hashToken(raw) },
     });
@@ -91,6 +96,17 @@ describe("tenant isolation and owner rules", () => {
       });
 
     expect(accept.status).toBe(200);
-    expect(accept.body.data.companyId).toBe(owner.companyId);
+    expect(accept.body.data.workspaceId).toBe(owner.workspaceId);
+
+    const onboarding = await prisma.workspaceOnboarding.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: owner.workspaceId!,
+          userId: accept.body.data.userId,
+        },
+      },
+    });
+    expect(onboarding?.onboardingType).toBe("INVITED_MEMBER");
+    expect(onboarding?.status).toBe("IN_PROGRESS");
   });
 });

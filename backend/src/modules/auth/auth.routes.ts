@@ -7,7 +7,7 @@ import { validateRequest } from "../../middleware/validate.js";
 import {
   changePassword,
   forgotPassword,
-  listCompanies,
+  listWorkspaces,
   listSessions,
   login,
   logout,
@@ -18,7 +18,7 @@ import {
   resendVerification,
   resetPassword,
   revokeSession,
-  selectCompany,
+  selectWorkspace,
   verifyEmail,
 } from "./auth.controller.js";
 import {
@@ -28,7 +28,7 @@ import {
   registerSchema,
   resendVerificationSchema,
   resetPasswordSchema,
-  selectCompanySchema,
+  selectWorkspaceSchema,
   sessionIdParamsSchema,
   verifyEmailSchema,
 } from "./auth.schemas.js";
@@ -40,6 +40,7 @@ const authRateLimit = rateLimit({
   max: env.AUTH_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => env.isTest,
   message: {
     success: false,
     error: {
@@ -114,12 +115,12 @@ authRouter.delete(
 );
 
 authRouter.post(
-  "/select-company",
+  "/select-workspace",
   authenticate,
-  validateRequest({ body: selectCompanySchema }),
-  selectCompany,
+  validateRequest({ body: selectWorkspaceSchema }),
+  selectWorkspace,
 );
 
 export const meRouter = Router();
 meRouter.use(authenticate);
-meRouter.get("/companies", listCompanies);
+meRouter.get("/workspaces", listWorkspaces);

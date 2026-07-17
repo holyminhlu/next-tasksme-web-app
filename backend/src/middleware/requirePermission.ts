@@ -22,7 +22,7 @@ export function requirePermission(...permissionKeys: string[]) {
           {
             requestId: req.requestId,
             userId: req.user.id,
-            companyId: req.tenant.companyId,
+            workspaceId: req.tenant.workspaceId,
             required: permissionKeys,
             actual: req.tenant.permissions,
           },

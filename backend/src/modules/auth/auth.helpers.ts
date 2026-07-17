@@ -1,4 +1,3 @@
-import type { CookieOptions, Request } from "express";
 import type { Prisma } from "../../../generated/prisma/client.js";
 import { prisma } from "../../config/database.js";
 import { getEnv } from "../../config/env.js";
@@ -29,11 +28,11 @@ export async function ensureUniqueSlug(
   base: string,
   tx: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<string> {
-  let candidate = base || "company";
+  let candidate = base || "workspace";
   let suffix = 1;
 
   while (true) {
-    const existing = await tx.company.findUnique({
+    const existing = await tx.workspace.findUnique({
       where: { slug: candidate },
       select: { id: true },
     });
@@ -62,8 +61,8 @@ export async function ensurePermissionCatalog(
   }
 }
 
-export async function createCompanyRoles(
-  companyId: string,
+export async function createWorkspaceRoles(
+  workspaceId: string,
   tx: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
   const permissions = await tx.permission.findMany();
@@ -76,7 +75,7 @@ export async function createCompanyRoles(
   for (const roleKey of SYSTEM_ROLE_KEYS) {
     const role = await tx.role.create({
       data: {
-        companyId,
+        workspaceId,
         key: roleKey,
         name: roleKey.charAt(0).toUpperCase() + roleKey.slice(1),
         description: `${roleKey} role`,
@@ -110,7 +109,7 @@ export function addHours(hours: number, from = new Date()): Date {
   return date;
 }
 
-export function getRefreshCookieOptions(rememberMe: boolean): CookieOptions {
+export function getRefreshCookieOptions(rememberMe: boolean) {
   const env = getEnv();
   const maxAgeDays = rememberMe
     ? env.REFRESH_TOKEN_REMEMBER_DAYS
@@ -126,7 +125,7 @@ export function getRefreshCookieOptions(rememberMe: boolean): CookieOptions {
   };
 }
 
-export function getClientMeta(req: Request) {
+export function getClientMeta(req: { ip?: string; get: (name: string) => string | undefined; requestId?: string }) {
   return {
     ipAddress: req.ip,
     userAgent: req.get("user-agent") ?? undefined,
@@ -136,7 +135,7 @@ export function getClientMeta(req: Request) {
 
 export async function issueTokenPair(
   user: { id: string; email: string; authVersion: number },
-  req: Request,
+  req: { ip?: string; get: (name: string) => string | undefined },
   options: { rememberMe?: boolean; familyId?: string } = {},
 ) {
   const env = getEnv();

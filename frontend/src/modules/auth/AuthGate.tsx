@@ -1,20 +1,39 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
+// Import the routing file directly (not the onboarding barrel) to avoid a
+// runtime module cycle between the auth and onboarding modules.
+import { decideWorkspaceRoute } from "@/modules/onboarding/routing";
 import { useAuth } from "./AuthProvider";
 import styles from "./auth.module.css";
 
 type AuthGateProps = {
   children: ReactNode;
-  requireCompany?: boolean;
+  /**
+   * Require a selected workspace with completed onboarding. Redirects to
+   * onboarding / workspace selection as needed (see decideWorkspaceRoute).
+   */
+  requireWorkspace?: boolean;
 };
 
-export function AuthGate({ children, requireCompany = false }: AuthGateProps) {
+export function AuthGate({
+  children,
+  requireWorkspace = false,
+}: AuthGateProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { status, selectedCompany, companies } = useAuth();
+  const { status, selectedWorkspace, workspaces, selectWorkspace } = useAuth();
+  const autoSelecting = useRef(false);
+
+  const decision = useMemo(
+    () =>
+      status === "authenticated" && requireWorkspace
+        ? decideWorkspaceRoute({ workspaces, selectedWorkspace, pathname })
+        : null,
+    [status, requireWorkspace, workspaces, selectedWorkspace, pathname],
+  );
 
   useEffect(() => {
     if (status === "loading") {
@@ -34,23 +53,25 @@ export function AuthGate({ children, requireCompany = false }: AuthGateProps) {
       return;
     }
 
-    if (
-      requireCompany &&
-      !selectedCompany &&
-      companies.length > 1 &&
-      pathname !== "/select-company"
-    ) {
-      router.replace("/select-company");
+    if (!decision) {
+      return;
     }
-  }, [
-    status,
-    router,
-    pathname,
-    searchParams,
-    selectedCompany,
-    companies.length,
-    requireCompany,
-  ]);
+
+    if (decision.kind === "redirect") {
+      router.replace(decision.to);
+      return;
+    }
+
+    if (decision.kind === "select" && !autoSelecting.current) {
+      autoSelecting.current = true;
+      void selectWorkspace(decision.workspaceId).then((result) => {
+        autoSelecting.current = false;
+        if (!result.ok) {
+          router.replace("/select-workspace");
+        }
+      });
+    }
+  }, [status, router, pathname, searchParams, decision, selectWorkspace]);
 
   if (status === "loading") {
     return <div className={styles.loading}>Loading session...</div>;
@@ -60,12 +81,7 @@ export function AuthGate({ children, requireCompany = false }: AuthGateProps) {
     return <div className={styles.loading}>Redirecting...</div>;
   }
 
-  if (
-    requireCompany &&
-    !selectedCompany &&
-    companies.length > 1 &&
-    pathname !== "/select-company"
-  ) {
+  if (decision && decision.kind !== "allow") {
     return <div className={styles.loading}>Redirecting...</div>;
   }
 

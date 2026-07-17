@@ -7,6 +7,7 @@ import {
   AuthCard,
   FormError,
   PasswordField,
+  SocialAuthPlaceholder,
   useAuth,
   validateRegisterForm,
 } from "@/modules/auth";
@@ -17,9 +18,9 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [companyName, setCompanyName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -31,9 +32,9 @@ export default function RegisterPage() {
     const validationError = validateRegisterForm({
       fullName,
       email,
-      companyName,
       password,
       confirmPassword,
+      acceptTerms,
     });
 
     if (validationError) {
@@ -45,7 +46,6 @@ export default function RegisterPage() {
     const result = await register({
       fullName,
       email,
-      companyName,
       password,
       confirmPassword,
     });
@@ -64,7 +64,7 @@ export default function RegisterPage() {
   return (
     <AuthCard
       title="Create account"
-      description="Register your company and verify your email to get started."
+      description="Sign up with your email. You will set up your workspace after verifying your email."
       footer={
         <>
           Already have an account? <Link href="/login">Sign in</Link>
@@ -99,18 +99,6 @@ export default function RegisterPage() {
           />
         </div>
 
-        <div className={styles.field}>
-          <label htmlFor="companyName">Company name</label>
-          <input
-            id="companyName"
-            name="companyName"
-            value={companyName}
-            onChange={(event) => setCompanyName(event.target.value)}
-            required
-            minLength={2}
-          />
-        </div>
-
         <PasswordField
           id="password"
           name="password"
@@ -131,6 +119,19 @@ export default function RegisterPage() {
           minLength={8}
         />
 
+        <label className={styles.checkboxRow}>
+          <input
+            type="checkbox"
+            checked={acceptTerms}
+            onChange={(event) => setAcceptTerms(event.target.checked)}
+            required
+          />
+          <span>
+            I agree to the <Link href="/terms">Terms of Service</Link> and{" "}
+            <Link href="/privacy">Privacy Policy</Link>
+          </span>
+        </label>
+
         <button
           type="submit"
           className={styles.primaryButton}
@@ -138,6 +139,8 @@ export default function RegisterPage() {
         >
           {submitting ? "Creating account..." : "Create account"}
         </button>
+
+        <SocialAuthPlaceholder mode="register" />
       </form>
     </AuthCard>
   );

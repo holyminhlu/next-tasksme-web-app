@@ -13,7 +13,6 @@ export const registerSchema = z
     password: passwordSchema,
     confirmPassword: z.string().min(1),
     fullName: z.string().trim().min(2).max(120),
-    companyName: z.string().trim().min(2).max(120),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
@@ -63,8 +62,8 @@ export const changePasswordSchema = z
   })
   .transform(({ confirmPassword: _confirmPassword, ...data }) => data);
 
-export const selectCompanySchema = z.object({
-  companyId: z.string().uuid(),
+export const selectWorkspaceSchema = z.object({
+  workspaceId: z.string().uuid(),
 });
 
 export const sessionIdParamsSchema = z.object({
@@ -78,4 +77,4 @@ export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
-export type SelectCompanyInput = z.infer<typeof selectCompanySchema>;
+export type SelectWorkspaceInput = z.infer<typeof selectWorkspaceSchema>;
