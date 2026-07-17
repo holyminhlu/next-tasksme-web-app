@@ -221,6 +221,18 @@ export function isRouteVisible(route: RouteMeta, context: NavContext): boolean {
   return true;
 }
 
+/** True when the module is enabled, or module state is still unknown. */
+export function isModuleEnabled(
+  context: NavContext,
+  moduleKey: string,
+): boolean {
+  if (context.enabledModuleKeys === null) {
+    return true;
+  }
+
+  return context.enabledModuleKeys.includes(moduleKey);
+}
+
 export function visibleRoutes(
   context: NavContext,
   routes: RouteMeta[] = APP_ROUTES,
