@@ -359,30 +359,33 @@
 
 .welcomeMain {
   flex: 1;
-  display: grid;
-  grid-template-columns: minmax(440px, 1.1fr) minmax(500px, 0.9fr);
-  align-items: center;
-  gap: clamp(40px, 5vw, 72px);
-  padding: 64px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  gap: 46px;
+  width: 100%;
+  padding: 52px 0 32px;
 }
 
 .welcomeIntro h1 {
-  max-width: 650px;
+  max-width: none;
   margin: 12px 0 18px;
   color: #0f172a;
-  font-size: clamp(2.5rem, 5vw, 4.4rem);
+  font-size: clamp(2.5rem, 5vw, 4rem);
   line-height: 1.02;
   letter-spacing: -0.055em;
 }
 
 .welcomeIntro > p:last-child {
-  max-width: 620px;
+  max-width: 780px;
   color: #64748b;
   font-size: 1.05rem;
   line-height: 1.75;
 }
 
 .welcomeForm {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 24px;
