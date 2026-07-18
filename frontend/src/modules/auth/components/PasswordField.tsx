@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import styles from "../auth.module.css";
 
 type PasswordFieldProps = {
@@ -46,7 +47,11 @@ export function PasswordField({
           onClick={() => setVisible((current) => !current)}
           aria-label={visible ? "Hide password" : "Show password"}
         >
-          {visible ? "Hide" : "Show"}
+          {visible ? (
+            <EyeOff size={18} aria-hidden />
+          ) : (
+            <Eye size={18} aria-hidden />
+          )}
         </button>
       </div>
     </div>

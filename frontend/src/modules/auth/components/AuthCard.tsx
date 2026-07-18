@@ -13,15 +13,17 @@ export function AuthCard({ title, description, children, footer }: AuthCardProps
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
-        <BrandLogo size="default" priority />
         <section className={styles.card}>
           <div className={styles.cardHeader}>
-            <h1>{title}</h1>
-            {description && <p>{description}</p>}
+            <BrandLogo size="compact" priority className={styles.cardLogo} />
+            <div className={styles.cardHeading}>
+              <h1>{title}</h1>
+              {description ? <p>{description}</p> : null}
+            </div>
           </div>
           {children}
         </section>
-        {footer && <div className={styles.footer}>{footer}</div>}
+        {footer ? <div className={styles.footer}>{footer}</div> : null}
       </div>
     </div>
   );
