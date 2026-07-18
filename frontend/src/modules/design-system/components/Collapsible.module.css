@@ -1,0 +1,56 @@
+.root {
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-surface);
+}
+
+.trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  color: var(--ds-color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.trigger:hover {
+  background: var(--ds-color-surface-hover);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--ds-color-text-muted);
+  transition: transform var(--ds-transition-fast);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.panel {
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--ds-color-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}

@@ -92,6 +92,7 @@ export function buildTaskListQueryParams(
     unassigned: filters.unassigned || undefined,
     includeArchived: filters.includeArchived || undefined,
     includeDeleted: filters.includeDeleted || undefined,
+    tagIds: asListParam(filters.tagIds),
     timezone: filters.timezone,
     page: filters.page,
     pageSize: filters.pageSize,

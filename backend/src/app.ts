@@ -11,6 +11,10 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { requestIdMiddleware } from "./middleware/requestId.js";
 import { v1Router } from "./modules/index.js";
 import { setupOpenApi } from "./openapi/setup.js";
+import {
+  readLocalObject,
+  verifyLocalFileSignature,
+} from "./services/storage.service.js";
 
 export function createApp() {
   const env = getEnv();
@@ -76,6 +80,39 @@ export function createApp() {
 
   setupOpenApi(app);
   app.use("/api/v1", v1Router);
+
+  // Signed local-file downloads (STORAGE_DRIVER=local). Not a public permanent URL.
+  app.get("/api/v1/internal/local-files", async (req, res, next) => {
+    try {
+      const key = typeof req.query.key === "string" ? req.query.key : "";
+      const expires = Number(req.query.expires);
+      const contentType =
+        typeof req.query.type === "string"
+          ? req.query.type
+          : "application/octet-stream";
+      const sig = typeof req.query.sig === "string" ? req.query.sig : "";
+      if (
+        !key ||
+        !expires ||
+        !sig ||
+        !verifyLocalFileSignature(key, expires, contentType, sig)
+      ) {
+        res.status(403).json({
+          success: false,
+          error: { code: "FORBIDDEN", message: "Invalid or expired download link" },
+        });
+        return;
+      }
+      const body = await readLocalObject(key);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("Cache-Control", "no-store");
+      res.send(body);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.use(notFoundHandler);
   app.use(errorHandler);
 

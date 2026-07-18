@@ -79,8 +79,11 @@ export {
 } from "./tasks.helpers";
 export type { ActiveFilterChip, DueDescriptor } from "./tasks.helpers";
 export * as tasksService from "./tasks.service";
+export * as collaborationService from "./collaboration.service";
+export * from "./collaboration.types";
 export { emitTasksChanged, subscribeTasksChanged } from "./tasks.events";
 export { TaskDetailDialog } from "./components/TaskDetailDialog";
+export { TaskCollaborationPanels } from "./components/TaskCollaborationPanels";
 export { SmartCaptureForm } from "./components/SmartCaptureForm";
 export { CreateTaskForm } from "./components/CreateTaskForm";
 export { AssigneePicker } from "./components/AssigneePicker";

@@ -17,6 +17,8 @@ export { Dialog } from "./components/Dialog";
 export type { DialogProps, DialogSize } from "./components/Dialog";
 export { Drawer } from "./components/Drawer";
 export type { DrawerProps } from "./components/Drawer";
+export { Collapsible } from "./components/Collapsible";
+export type { CollapsibleProps } from "./components/Collapsible";
 export {
   DropdownMenu,
   MenuItem,

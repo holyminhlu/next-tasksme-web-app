@@ -63,6 +63,24 @@ const envSchema = z.object({
   ENABLE_SWAGGER: booleanFromEnv.optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().min(1).default("gemini-3-flash-preview"),
+  STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().min(1).default("us-east-1"),
+  S3_BUCKET: z.string().min(1).default("taskmng-attachments"),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: booleanFromEnv.default(true),
+  LOCAL_STORAGE_DIR: z.string().min(1).default(".data/attachments"),
+  ATTACHMENT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10 * 1024 * 1024),
+  ATTACHMENT_SIGNED_URL_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(300),
 });
 
 export type Env = z.infer<typeof envSchema> & {

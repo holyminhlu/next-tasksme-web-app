@@ -88,6 +88,7 @@ export type TaskListFilters = {
   unassigned?: boolean | null;
   includeArchived?: boolean | null;
   includeDeleted?: boolean | null;
+  tagIds?: string | string[] | null;
   timezone?: string | null;
   page?: number;
   pageSize?: number;
@@ -287,6 +288,8 @@ export type TaskFilterState = {
   unassigned: boolean;
   includeArchived: boolean;
   includeDeleted: boolean;
+  /** Workspace tag ids (AND/OR handled server-side as "any of"). */
+  tagIds: string[];
   sortBy: TaskSortBy;
   sortOrder: SortOrder;
   page: number;

@@ -83,6 +83,78 @@ export const PERMISSIONS = [
     key: "projects:delete",
     description: "Delete projects",
   },
+  {
+    key: "checklist.manage",
+    description: "Manage task checklist items",
+  },
+  {
+    key: "tag.view",
+    description: "View workspace tags",
+  },
+  {
+    key: "tag.create",
+    description: "Create workspace tags",
+  },
+  {
+    key: "tag.update",
+    description: "Update workspace tags",
+  },
+  {
+    key: "tag.delete",
+    description: "Delete workspace tags",
+  },
+  {
+    key: "task.tag.manage",
+    description: "Assign tags to tasks",
+  },
+  {
+    key: "custom_field.view",
+    description: "View custom field definitions and values",
+  },
+  {
+    key: "custom_field.configure",
+    description: "Configure custom field definitions",
+  },
+  {
+    key: "custom_field.value.update",
+    description: "Update custom field values on tasks",
+  },
+  {
+    key: "comment.view",
+    description: "View task comments",
+  },
+  {
+    key: "comment.create",
+    description: "Create task comments",
+  },
+  {
+    key: "comment.update_own",
+    description: "Update own task comments",
+  },
+  {
+    key: "comment.delete_own",
+    description: "Delete own task comments",
+  },
+  {
+    key: "comment.moderate",
+    description: "Moderate any task comments",
+  },
+  {
+    key: "attachment.view",
+    description: "View task attachments",
+  },
+  {
+    key: "attachment.upload",
+    description: "Upload task attachments",
+  },
+  {
+    key: "attachment.delete_own",
+    description: "Delete own task attachments",
+  },
+  {
+    key: "attachment.manage",
+    description: "Manage any task attachments",
+  },
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
@@ -90,6 +162,44 @@ export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
 export const SYSTEM_ROLE_KEYS = ["owner", "admin", "manager", "member"] as const;
 
 export type SystemRoleKey = (typeof SYSTEM_ROLE_KEYS)[number];
+
+const COLLAB_FULL: PermissionKey[] = [
+  "checklist.manage",
+  "tag.view",
+  "tag.create",
+  "tag.update",
+  "tag.delete",
+  "task.tag.manage",
+  "custom_field.view",
+  "custom_field.configure",
+  "custom_field.value.update",
+  "comment.view",
+  "comment.create",
+  "comment.update_own",
+  "comment.delete_own",
+  "comment.moderate",
+  "attachment.view",
+  "attachment.upload",
+  "attachment.delete_own",
+  "attachment.manage",
+];
+
+const COLLAB_MEMBER: PermissionKey[] = [
+  "checklist.manage",
+  "tag.view",
+  "tag.create",
+  "tag.update",
+  "task.tag.manage",
+  "custom_field.view",
+  "custom_field.value.update",
+  "comment.view",
+  "comment.create",
+  "comment.update_own",
+  "comment.delete_own",
+  "attachment.view",
+  "attachment.upload",
+  "attachment.delete_own",
+];
 
 export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
   owner: PERMISSIONS.map((permission) => permission.key),
@@ -114,6 +224,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "dashboard:read",
     "activity:read",
     "projects:delete",
+    ...COLLAB_FULL,
   ],
   manager: [
     "workspace:read",
@@ -131,6 +242,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "tasks:assign",
     "dashboard:read",
     "activity:read",
+    ...COLLAB_FULL,
   ],
   member: [
     "workspace:read",
@@ -144,6 +256,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "tasks:assign",
     "dashboard:read",
     "activity:read",
+    ...COLLAB_MEMBER,
   ],
 };
 

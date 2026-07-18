@@ -297,3 +297,43 @@ export function downloadBlob(blob: Blob, filename: string): void {
   anchor.remove();
   URL.revokeObjectURL(url);
 }
+
+/** POST multipart/form-data (file uploads). Do not set Content-Type manually. */
+export async function postFormData<T>(
+  path: string,
+  formData: FormData,
+  options: Omit<RequestOptions, "body"> = {},
+): Promise<ApiEnvelope<T>> {
+  const { skipAuth = false, skipRefresh = false, headers, ...rest } = options;
+  const requestHeaders = new Headers(headers);
+
+  if (!skipAuth && accessToken) {
+    requestHeaders.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  const doFetch = async () =>
+    fetch(`${API_BASE_URL}${API_PREFIX}${path}`, {
+      ...rest,
+      method: "POST",
+      credentials: "include",
+      headers: requestHeaders,
+      body: formData,
+    });
+
+  let response = await doFetch();
+
+  if (
+    response.status === 401 &&
+    !skipAuth &&
+    !skipRefresh &&
+    !path.startsWith("/auth/refresh")
+  ) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      requestHeaders.set("Authorization", `Bearer ${newToken}`);
+      response = await doFetch();
+    }
+  }
+
+  return parseEnvelope<T>(response);
+}

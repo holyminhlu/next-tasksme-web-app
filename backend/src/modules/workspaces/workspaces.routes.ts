@@ -9,6 +9,14 @@ import { projectsRouter } from "../projects/projects.routes.js";
 import { tasksRouter } from "../tasks/tasks.routes.js";
 import { notificationsRouter } from "../notifications/notifications.routes.js";
 import { savedViewsRouter } from "../saved-views/saved-views.routes.js";
+import { checklistRouter } from "../checklist/checklist.routes.js";
+import { tagsRouter, taskTagsRouter } from "../tags/tags.routes.js";
+import {
+  customFieldsRouter,
+  taskCustomFieldsRouter,
+} from "../custom-fields/custom-fields.routes.js";
+import { commentsRouter } from "../comments/comments.routes.js";
+import { attachmentsRouter } from "../attachments/attachments.routes.js";
 import {
   acceptInvitation,
   applyModulePreset,
@@ -210,6 +218,22 @@ workspacesRouter.post(
 );
 
 workspacesRouter.use("/:workspaceId/tasks", tasksRouter);
+workspacesRouter.use(
+  "/:workspaceId/tasks/:taskId/checklist-items",
+  checklistRouter,
+);
+workspacesRouter.use("/:workspaceId/tasks/:taskId/tags", taskTagsRouter);
+workspacesRouter.use(
+  "/:workspaceId/tasks/:taskId/custom-field-values",
+  taskCustomFieldsRouter,
+);
+workspacesRouter.use("/:workspaceId/tasks/:taskId/comments", commentsRouter);
+workspacesRouter.use(
+  "/:workspaceId/tasks/:taskId/attachments",
+  attachmentsRouter,
+);
+workspacesRouter.use("/:workspaceId/tags", tagsRouter);
+workspacesRouter.use("/:workspaceId/custom-fields", customFieldsRouter);
 workspacesRouter.use("/:workspaceId/projects", projectsRouter);
 workspacesRouter.use("/:workspaceId/dashboard", dashboardRouter);
 workspacesRouter.use("/:workspaceId/notifications", notificationsRouter);
