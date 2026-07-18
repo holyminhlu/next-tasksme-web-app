@@ -49,6 +49,9 @@ beforeEach(async () => {
   await prisma.activityEvent.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.notificationPreference.deleteMany();
+  await prisma.taskStatusHistory.deleteMany();
+  await prisma.timeLog.deleteMany();
+  await prisma.taskDependency.deleteMany();
   await prisma.commentMention.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.attachment.deleteMany();

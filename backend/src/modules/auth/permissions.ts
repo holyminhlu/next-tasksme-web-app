@@ -155,6 +155,46 @@ export const PERMISSIONS = [
     key: "attachment.manage",
     description: "Manage any task attachments",
   },
+  {
+    key: "task_dependency.view",
+    description: "View task dependencies",
+  },
+  {
+    key: "task_dependency.manage",
+    description: "Manage task dependencies",
+  },
+  {
+    key: "task_dependency.override",
+    description: "Override dependency completion policy",
+  },
+  {
+    key: "time_log.view_own",
+    description: "View own time logs",
+  },
+  {
+    key: "time_log.create",
+    description: "Create and run own time logs",
+  },
+  {
+    key: "time_log.update_own",
+    description: "Update own time logs",
+  },
+  {
+    key: "time_log.delete_own",
+    description: "Delete own time logs",
+  },
+  {
+    key: "time_log.view_all",
+    description: "View all workspace time logs",
+  },
+  {
+    key: "time_log.manage_all",
+    description: "Manage all workspace time logs",
+  },
+  {
+    key: "task_history.view",
+    description: "View task stage history",
+  },
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
@@ -201,6 +241,29 @@ const COLLAB_MEMBER: PermissionKey[] = [
   "attachment.delete_own",
 ];
 
+const PHASE_72_FULL: PermissionKey[] = [
+  "task_dependency.view",
+  "task_dependency.manage",
+  "task_dependency.override",
+  "time_log.view_own",
+  "time_log.create",
+  "time_log.update_own",
+  "time_log.delete_own",
+  "time_log.view_all",
+  "time_log.manage_all",
+  "task_history.view",
+];
+
+const PHASE_72_MEMBER: PermissionKey[] = [
+  "task_dependency.view",
+  "task_dependency.manage",
+  "time_log.view_own",
+  "time_log.create",
+  "time_log.update_own",
+  "time_log.delete_own",
+  "task_history.view",
+];
+
 export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
   owner: PERMISSIONS.map((permission) => permission.key),
   admin: [
@@ -225,6 +288,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "activity:read",
     "projects:delete",
     ...COLLAB_FULL,
+    ...PHASE_72_FULL,
   ],
   manager: [
     "workspace:read",
@@ -243,6 +307,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "dashboard:read",
     "activity:read",
     ...COLLAB_FULL,
+    ...PHASE_72_FULL,
   ],
   member: [
     "workspace:read",
@@ -257,6 +322,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "dashboard:read",
     "activity:read",
     ...COLLAB_MEMBER,
+    ...PHASE_72_MEMBER,
   ],
 };
 

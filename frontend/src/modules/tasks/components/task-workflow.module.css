@@ -1,0 +1,173 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.heading {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+}
+
+.dependencyRow,
+.timeRow,
+.timer,
+.summaryRow,
+.timerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dependencyRow,
+.timeRow,
+.timer {
+  padding: 9px;
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-sm);
+}
+
+.taskLink {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 7px;
+  overflow: hidden;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.taskLink span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta,
+.muted {
+  color: var(--ds-color-text-subtle);
+  font-size: 0.78rem;
+}
+
+.warning {
+  padding: 10px;
+  color: var(--ds-color-warning-text);
+  background: var(--ds-color-warning-surface);
+  border: 1px solid var(--ds-color-warning-border);
+  border-radius: var(--ds-radius-sm);
+}
+
+.overrideAction {
+  margin-top: 8px;
+}
+
+.timeEditRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-color-surface-sunken);
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(180px, 1fr);
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ds-color-border);
+}
+
+.grow {
+  min-width: 0;
+  flex: 1;
+}
+
+.timer {
+  background: var(--ds-color-surface-sunken);
+}
+
+.timerActions {
+  align-items: stretch;
+}
+
+.timerActions > :first-child {
+  flex: 1;
+}
+
+.manualGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-sm);
+}
+
+.summaryRow {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.historyRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 8px;
+  padding: 0 0 16px;
+}
+
+.historyRow:not(:last-child)::before {
+  position: absolute;
+  top: 12px;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  content: "";
+  background: var(--ds-color-border);
+}
+
+.timelineDot {
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  background: var(--ds-color-accent);
+  border: 2px solid var(--ds-color-surface);
+  border-radius: 50%;
+}
+
+@media (max-width: 720px) {
+  .dependencyRow {
+    flex-wrap: wrap;
+  }
+
+  .meta {
+    display: none;
+  }
+
+  .composer,
+  .manualGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .timerActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -7,6 +7,7 @@ import {
   ForbiddenState,
   FormField,
   LoadingState,
+  Select,
   TextInput,
   useToast,
 } from "@/modules/design-system";
@@ -31,6 +32,9 @@ export default function WorkspaceSettingsPage() {
   const [locale, setLocale] = useState("vi");
   const [industryCode, setIndustryCode] = useState("");
   const [companySize, setCompanySize] = useState("");
+  const [dependencyPolicy, setDependencyPolicy] = useState<
+    "WARN_ONLY" | "BLOCK" | "BLOCK_WITH_OVERRIDE"
+  >("WARN_ONLY");
   const [slug, setSlug] = useState("");
 
   const loadWorkspace = useCallback(async () => {
@@ -55,6 +59,9 @@ export default function WorkspaceSettingsPage() {
     setLocale(result.data.locale);
     setIndustryCode(result.data.industryCode ?? "");
     setCompanySize(result.data.companySize ?? "");
+    setDependencyPolicy(
+      result.data.dependencyCompletionPolicy ?? "WARN_ONLY",
+    );
   }, [workspaceId]);
 
   useEffect(() => {
@@ -79,6 +86,7 @@ export default function WorkspaceSettingsPage() {
       usagePurpose: usagePurpose.trim() || null,
       timezone: timezone.trim(),
       locale: locale.trim(),
+      dependencyCompletionPolicy: dependencyPolicy,
       ...(isOrganization
         ? {
             industryCode: industryCode.trim() || null,
@@ -215,6 +223,32 @@ export default function WorkspaceSettingsPage() {
                 readOnly={!canUpdate}
                 disabled={!canUpdate}
               />
+            )}
+          </FormField>
+          <FormField
+            label="Dependency completion policy"
+            hint="Controls completing a task while predecessor tasks are unfinished."
+          >
+            {(props) => (
+              <Select
+                {...props}
+                value={dependencyPolicy}
+                disabled={!canUpdate}
+                onChange={(event) =>
+                  setDependencyPolicy(
+                    event.target.value as
+                      | "WARN_ONLY"
+                      | "BLOCK"
+                      | "BLOCK_WITH_OVERRIDE",
+                  )
+                }
+              >
+                <option value="WARN_ONLY">Warn only</option>
+                <option value="BLOCK">Block completion</option>
+                <option value="BLOCK_WITH_OVERRIDE">
+                  Block with permission-based override
+                </option>
+              </Select>
             )}
           </FormField>
           <div className={styles.formActions}>

@@ -38,6 +38,29 @@ const COLLAB_MEMBER: PermissionKey[] = [
   "attachment.delete_own",
 ];
 
+const PHASE_72_FULL: PermissionKey[] = [
+  "task_dependency.view",
+  "task_dependency.manage",
+  "task_dependency.override",
+  "time_log.view_own",
+  "time_log.create",
+  "time_log.update_own",
+  "time_log.delete_own",
+  "time_log.view_all",
+  "time_log.manage_all",
+  "task_history.view",
+];
+
+const PHASE_72_MEMBER: PermissionKey[] = [
+  "task_dependency.view",
+  "task_dependency.manage",
+  "time_log.view_own",
+  "time_log.create",
+  "time_log.update_own",
+  "time_log.delete_own",
+  "task_history.view",
+];
+
 // Mirrors backend ROLE_PERMISSION_MAP (backend/src/modules/auth/permissions.ts).
 export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
   owner: [
@@ -63,6 +86,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "dashboard:read",
     "activity:read",
     ...COLLAB_FULL,
+    ...PHASE_72_FULL,
   ],
   admin: [
     "workspace:read",
@@ -86,6 +110,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "dashboard:read",
     "activity:read",
     ...COLLAB_FULL,
+    ...PHASE_72_FULL,
   ],
   manager: [
     "workspace:read",
@@ -104,6 +129,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "dashboard:read",
     "activity:read",
     ...COLLAB_FULL,
+    ...PHASE_72_FULL,
   ],
   member: [
     "workspace:read",
@@ -118,6 +144,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "dashboard:read",
     "activity:read",
     ...COLLAB_MEMBER,
+    ...PHASE_72_MEMBER,
   ],
 };
 

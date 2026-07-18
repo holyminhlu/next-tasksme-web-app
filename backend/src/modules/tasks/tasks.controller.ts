@@ -32,6 +32,7 @@ function requireActor(req: Request) {
   return {
     userId: req.user.id,
     roleKey: req.tenant.roleKey,
+    permissions: req.tenant.permissions,
   };
 }
 

@@ -50,6 +50,10 @@ export type TaskRecord = {
   completedByName: string | null;
   isBlocked: boolean;
   blockedReason: string | null;
+  dependencyBlocked: boolean;
+  dependencyOverrideReason: string | null;
+  dependencyOverriddenById: string | null;
+  dependencyOverriddenAt: string | null;
   source: TaskSource | null;
   projectId: string | null;
   projectName: string | null;
@@ -130,6 +134,7 @@ export type UpdateTaskInput = {
   assigneeId: string | null;
   isBlocked: boolean;
   blockedReason: string | null;
+  dependencyOverrideReason: string;
 }>;
 
 export type VersionMutationInput = {
@@ -138,6 +143,7 @@ export type VersionMutationInput = {
 
 export type StatusMutationInput = VersionMutationInput & {
   status: TaskStatus;
+  dependencyOverrideReason?: string;
 };
 
 export type AssigneeMutationInput = VersionMutationInput & {
@@ -150,6 +156,7 @@ export type BulkUpdateChanges = Partial<{
   assigneeId: string | null;
   projectId: string | null;
   archived: boolean;
+  dependencyOverrideReason: string;
 }>;
 
 export type BulkUpdateItem = {

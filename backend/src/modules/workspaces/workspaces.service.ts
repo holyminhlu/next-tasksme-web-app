@@ -246,6 +246,7 @@ export class WorkspacesService {
           timezone: input.timezone,
           locale: input.locale,
           logoUrl: input.logoUrl,
+          dependencyCompletionPolicy: input.dependencyCompletionPolicy,
         },
       });
 

@@ -149,6 +149,7 @@ export const moveTaskSchema = z
     beforeTaskId: z.string().uuid().nullable().optional(),
     afterTaskId: z.string().uuid().nullable().optional(),
     version: z.number().int().min(1),
+    dependencyOverrideReason: z.string().trim().min(5).max(500).optional(),
   })
   .refine(
     (value) =>
@@ -214,6 +215,7 @@ export const createTaskSchema = z
     assigneeId: z.string().uuid().nullable().optional(),
     isBlocked: z.boolean().optional(),
     blockedReason: z.string().trim().max(500).nullable().optional(),
+    dependencyOverrideReason: z.string().trim().min(5).max(500).optional(),
     confirmedFromQuickCapture: z.boolean().optional(),
   })
   .refine(taskDatesValid, {
@@ -234,6 +236,7 @@ export const updateTaskSchema = z
     assigneeId: z.string().uuid().nullable().optional(),
     isBlocked: z.boolean().optional(),
     blockedReason: z.string().trim().max(500).nullable().optional(),
+    dependencyOverrideReason: z.string().trim().min(5).max(500).optional(),
   })
   .refine((data) => Object.keys(data).some((key) => key !== "version"), {
     message: "At least one field is required",
@@ -249,6 +252,7 @@ export const versionMutationSchema = z.object({
 
 export const statusMutationSchema = versionMutationSchema.extend({
   status: taskStatusSchema,
+  dependencyOverrideReason: z.string().trim().min(5).max(500).optional(),
 });
 
 export const assigneeMutationSchema = versionMutationSchema.extend({
@@ -280,6 +284,7 @@ export const bulkUpdateSchema = z.object({
             assigneeId: z.string().uuid().nullable().optional(),
             projectId: z.string().uuid().nullable().optional(),
             archived: z.boolean().optional(),
+            dependencyOverrideReason: z.string().trim().min(5).max(500).optional(),
           })
           .refine((value) => Object.keys(value).length > 0, "Changes are required"),
       }),
