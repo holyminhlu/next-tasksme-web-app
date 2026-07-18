@@ -2,11 +2,7 @@ import type { Prisma } from "../../generated/prisma/client.js";
 import type { SystemRoleKey } from "../modules/auth/permissions.js";
 import { ForbiddenError } from "./errors.js";
 
-export const WORKSPACE_SCOPE_ROLES: SystemRoleKey[] = [
-  "owner",
-  "admin",
-  "manager",
-];
+export const WORKSPACE_SCOPE_ROLES: SystemRoleKey[] = ["owner", "admin", "manager"];
 
 export function hasWorkspaceTaskScope(roleKey: string): boolean {
   return WORKSPACE_SCOPE_ROLES.includes(roleKey as SystemRoleKey);
@@ -36,43 +32,67 @@ type ScopeInput = {
   assigneeId?: string;
   projectId?: string;
   status?: string[];
+  includeArchived?: boolean;
+  includeDeleted?: boolean;
 };
 
-export function buildTaskVisibilityWhere(
-  input: ScopeInput,
-): Prisma.TaskWhereInput {
+export function buildTaskVisibilityWhere(input: ScopeInput): Prisma.TaskWhereInput {
   const base: Prisma.TaskWhereInput = {
     workspaceId: input.workspaceId,
-    deletedAt: null,
+    ...(input.includeDeleted ? {} : { deletedAt: null }),
+    ...(input.includeArchived ? {} : { archivedAt: null }),
     ...(input.projectId ? { projectId: input.projectId } : {}),
     ...(input.status?.length ? { status: { in: input.status as never[] } } : {}),
   };
+
+  const privateProjectScope: Prisma.TaskWhereInput =
+    input.roleKey === "owner" || input.roleKey === "admin"
+      ? {}
+      : {
+          OR: [
+            { projectId: null },
+            { project: { visibility: "WORKSPACE" } },
+            { project: { members: { some: { userId: input.userId } } } },
+          ],
+        };
 
   if (hasWorkspaceTaskScope(input.roleKey)) {
     if (input.memberId) {
       return {
         ...base,
-        OR: [
-          { assigneeId: input.memberId },
-          { createdById: input.memberId },
+        AND: [
+          privateProjectScope,
+          {
+            OR: [{ assigneeId: input.memberId }, { createdById: input.memberId }],
+          },
         ],
       };
     }
 
     if (input.assigneeId) {
-      return { ...base, assigneeId: input.assigneeId };
+      return { ...base, AND: [privateProjectScope, { assigneeId: input.assigneeId }] };
     }
 
-    return base;
+    return { ...base, AND: [privateProjectScope] };
   }
 
   return {
     ...base,
-    OR: [{ assigneeId: input.userId }, { createdById: input.userId }],
+    AND: [
+      privateProjectScope,
+      {
+        OR: [{ assigneeId: input.userId }, { createdById: input.userId }],
+      },
+    ],
   };
 }
 
-export const OPEN_TASK_STATUSES = ["TODO", "IN_PROGRESS"] as const;
+export const OPEN_TASK_STATUSES = [
+  "TODO",
+  "IN_PROGRESS",
+  "IN_REVIEW",
+  "BLOCKED",
+] as const;
 
 export function isOpenTask(status: string): boolean {
   return OPEN_TASK_STATUSES.includes(status as (typeof OPEN_TASK_STATUSES)[number]);

@@ -84,10 +84,10 @@ export function TopBar({ showMenuButton }: { showMenuButton: boolean }) {
     setCommandPaletteOpen,
     setNotificationsOpen,
     setMobileNavOpen,
-    unreadNotificationIds,
+    unreadNotificationCount,
   } = useShell();
 
-  const unreadCount = unreadNotificationIds.length;
+  const unreadCount = unreadNotificationCount;
 
   return (
     <header className={styles.topbar}>

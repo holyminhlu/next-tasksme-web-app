@@ -1,6 +1,5 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -10,8 +9,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/modules/auth";
 import { listModules } from "@/modules/onboarding/onboarding.service";
+import {
+  notificationsService,
+  type WorkspaceNotification,
+} from "@/modules/notifications";
 import {
   DEFAULT_SHELL_PREFERENCES,
   loadShellPreferences,
@@ -22,11 +26,6 @@ import {
   type ThemePreference,
 } from "./preferences";
 import { findRouteByPath, type NavContext } from "./navigation";
-import {
-  seededNotifications,
-  unreadNotifications,
-  type ShellNotification,
-} from "./notifications";
 
 export type QuickCreateKind = "task" | "project" | "invite";
 
@@ -66,13 +65,16 @@ type ShellContextValue = {
   quickCreate: QuickCreateKind | null;
   setQuickCreate: (kind: QuickCreateKind | null) => void;
 
-  /** Notification center (local notifications; no backend feed yet). */
-  notifications: ShellNotification[];
-  unreadNotificationIds: string[];
+  /** Backend workspace notifications. */
+  notifications: WorkspaceNotification[];
+  notificationsLoading: boolean;
+  notificationsError: string | null;
+  unreadNotificationCount: number;
   notificationsOpen: boolean;
   setNotificationsOpen: (open: boolean) => void;
-  markNotificationRead: (id: string) => void;
-  markAllNotificationsRead: () => void;
+  refreshNotifications: () => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
 
   /** Mobile navigation drawer. */
   mobileNavOpen: boolean;
@@ -98,6 +100,14 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const [quickCreate, setQuickCreate] = useState<QuickCreateKind | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [notifications, setNotifications] = useState<WorkspaceNotification[]>(
+    [],
+  );
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(
+    null,
+  );
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   const prefs = prefsState?.prefs ?? DEFAULT_SHELL_PREFERENCES;
   const hydrated = prefsState !== null && prefsState.workspaceId === workspaceId;
@@ -161,6 +171,56 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     setEnabledModuleKeys(null);
     void refreshModules();
   }, [refreshModules]);
+
+  const refreshNotifications = useCallback(async () => {
+    if (!workspaceId) {
+      setNotifications([]);
+      setUnreadNotificationCount(0);
+      setNotificationsError(null);
+      setNotificationsLoading(false);
+      return;
+    }
+
+    setNotificationsLoading(true);
+    setNotificationsError(null);
+
+    const [listResult, unreadResult] = await Promise.all([
+      notificationsService.listNotifications(workspaceId, {
+        page: 1,
+        pageSize: 50,
+      }),
+      notificationsService.getUnreadNotificationCount(workspaceId),
+    ]);
+
+    setNotificationsLoading(false);
+
+    if (!listResult.ok) {
+      setNotifications([]);
+      setUnreadNotificationCount(0);
+      setNotificationsError(listResult.message);
+      return;
+    }
+
+    setNotifications(listResult.data.items);
+    setUnreadNotificationCount(
+      unreadResult.ok
+        ? unreadResult.data
+        : listResult.data.items.filter((item) => !item.readAt).length,
+    );
+  }, [workspaceId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch workspace notifications
+    void refreshNotifications();
+  }, [refreshNotifications]);
+
+  // Refresh when the drawer opens so the feed stays current.
+  useEffect(() => {
+    if (notificationsOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- refresh feed on open
+      void refreshNotifications();
+    }
+  }, [notificationsOpen, refreshNotifications]);
 
   // Apply the theme preference to the document root. A future root theme
   // provider can take over by owning data-theme instead.
@@ -245,18 +305,88 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [toggleFocusMode]);
 
-  const notifications = useMemo(
-    () => seededNotifications(selectedWorkspace?.name ?? null),
-    [selectedWorkspace?.name],
+  const markNotificationRead = useCallback(
+    async (id: string) => {
+      if (!workspaceId) {
+        return;
+      }
+
+      const previous = notifications;
+      const wasUnread = previous.some(
+        (item) => item.id === id && !item.readAt,
+      );
+
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === id
+            ? { ...item, readAt: item.readAt ?? new Date().toISOString() }
+            : item,
+        ),
+      );
+      if (wasUnread) {
+        setUnreadNotificationCount((count) => Math.max(0, count - 1));
+      }
+
+      const result = await notificationsService.markNotificationRead(
+        workspaceId,
+        id,
+      );
+
+      if (!result.ok) {
+        setNotifications(previous);
+        if (wasUnread) {
+          setUnreadNotificationCount((count) => count + 1);
+        }
+        setNotificationsError(result.message);
+        return;
+      }
+
+      setNotifications((current) =>
+        current.map((item) => (item.id === id ? result.data : item)),
+      );
+    },
+    [workspaceId, notifications],
   );
 
-  const unreadNotificationIds = useMemo(
-    () =>
-      unreadNotifications(notifications, prefs.readNotificationIds).map(
-        (notification) => notification.id,
+  const markAllNotificationsRead = useCallback(async () => {
+    if (!workspaceId) {
+      return;
+    }
+
+    const previous = notifications;
+    const previousUnread = unreadNotificationCount;
+    const unreadIds = previous
+      .filter((item) => !item.readAt)
+      .map((item) => item.id);
+
+    setNotifications((current) =>
+      current.map((item) =>
+        item.readAt
+          ? item
+          : { ...item, readAt: new Date().toISOString() },
       ),
-    [notifications, prefs.readNotificationIds],
-  );
+    );
+    setUnreadNotificationCount(0);
+
+    const result = await notificationsService.markAllNotificationsRead(
+      workspaceId,
+      unreadIds,
+    );
+
+    if (!result.ok) {
+      setNotifications(previous);
+      setUnreadNotificationCount(previousUnread);
+      setNotificationsError(result.message);
+      return;
+    }
+
+    await refreshNotifications();
+  }, [
+    workspaceId,
+    notifications,
+    unreadNotificationCount,
+    refreshNotifications,
+  ]);
 
   const navContext = useMemo<NavContext>(
     () => ({
@@ -301,25 +431,14 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       quickCreate,
       setQuickCreate,
       notifications,
-      unreadNotificationIds,
+      notificationsLoading,
+      notificationsError,
+      unreadNotificationCount,
       notificationsOpen,
       setNotificationsOpen,
-      markNotificationRead: (id) =>
-        updatePrefs((current) =>
-          current.readNotificationIds.includes(id)
-            ? current
-            : {
-                ...current,
-                readNotificationIds: [...current.readNotificationIds, id],
-              },
-        ),
-      markAllNotificationsRead: () =>
-        updatePrefs((current) => ({
-          ...current,
-          readNotificationIds: notifications.map(
-            (notification) => notification.id,
-          ),
-        })),
+      refreshNotifications,
+      markNotificationRead,
+      markAllNotificationsRead,
       mobileNavOpen,
       setMobileNavOpen,
     }),
@@ -332,8 +451,13 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       commandPaletteOpen,
       quickCreate,
       notifications,
-      unreadNotificationIds,
+      notificationsLoading,
+      notificationsError,
+      unreadNotificationCount,
       notificationsOpen,
+      refreshNotifications,
+      markNotificationRead,
+      markAllNotificationsRead,
       mobileNavOpen,
     ],
   );

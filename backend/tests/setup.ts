@@ -47,7 +47,11 @@ beforeAll(async () => {
 beforeEach(async () => {
   await prisma.auditLog.deleteMany();
   await prisma.activityEvent.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.notificationPreference.deleteMany();
   await prisma.task.deleteMany();
+  await prisma.workspaceTaskCounter.deleteMany();
+  await prisma.projectMember.deleteMany();
   await prisma.project.deleteMany();
   await prisma.workspaceModule.deleteMany();
   await prisma.workspaceOnboarding.deleteMany();

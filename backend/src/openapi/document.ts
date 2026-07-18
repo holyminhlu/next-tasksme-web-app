@@ -26,14 +26,32 @@ import {
   updateWorkspaceSchema,
   workspaceIdParamsSchema,
 } from "../modules/workspaces/workspaces.schemas.js";
-import { createProjectSchema } from "../modules/projects/projects.schemas.js";
 import {
+  createProjectSchema,
+  eligibleAssigneesQuerySchema,
+  projectParamsSchema,
+  replaceProjectMembersSchema,
+  updateProjectVisibilitySchema,
+} from "../modules/projects/projects.schemas.js";
+import {
+  assigneeMutationSchema,
+  bulkDeleteSchema,
+  bulkUpdateSchema,
   createTaskSchema,
+  deleteTaskQuerySchema,
   listTasksQuerySchema,
   parseTaskSchema,
+  statusMutationSchema,
+  taskActivityQuerySchema,
   taskIdParamsSchema,
   updateTaskSchema,
+  versionMutationSchema,
 } from "../modules/tasks/tasks.schemas.js";
+import {
+  listNotificationsQuerySchema,
+  notificationParamsSchema,
+  updateNotificationPreferenceSchema,
+} from "../modules/notifications/notifications.schemas.js";
 import {
   activityQuerySchema,
   dashboardQuerySchema,
@@ -140,6 +158,113 @@ registry.registerPath({
   tags: ["Health"],
   responses: { 200: { description: "Liveness probe" } },
 });
+
+for (const mutation of [
+  { path: "status", schema: statusMutationSchema, description: "Task status changed" },
+  {
+    path: "assignee",
+    schema: assigneeMutationSchema,
+    description: "Task assignee changed",
+  },
+] as const) {
+  registry.registerPath({
+    method: "patch",
+    path: `/api/v1/workspaces/{workspaceId}/tasks/{taskId}/${mutation.path}`,
+    tags: ["Tasks"],
+    security: [{ bearerAuth: [] }],
+    request: { params: taskIdParamsSchema, ...jsonBody(mutation.schema) },
+    responses: {
+      200: { description: mutation.description },
+      409: { description: "Stale task version" },
+    },
+  });
+}
+
+for (const lifecycle of ["archive", "unarchive", "restore"] as const) {
+  registry.registerPath({
+    method: "post",
+    path: `/api/v1/workspaces/{workspaceId}/tasks/{taskId}/${lifecycle}`,
+    tags: ["Tasks"],
+    security: [{ bearerAuth: [] }],
+    request: { params: taskIdParamsSchema, ...jsonBody(versionMutationSchema) },
+    responses: {
+      200: { description: `Task ${lifecycle}d` },
+      409: { description: "Stale task version" },
+    },
+  });
+}
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/bulk-update",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema, ...jsonBody(bulkUpdateSchema) },
+  responses: { 200: { description: "Per-item bulk update results" } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/bulk-delete",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema, ...jsonBody(bulkDeleteSchema) },
+  responses: { 200: { description: "Per-item bulk delete results" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/activity",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: { params: taskIdParamsSchema, query: taskActivityQuerySchema },
+  responses: { 200: { description: "Task activity history" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/notifications",
+  tags: ["Notifications"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema, query: listNotificationsQuerySchema },
+  responses: { 200: { description: "Current user's notifications" } },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/workspaces/{workspaceId}/notifications/{notificationId}/read",
+  tags: ["Notifications"],
+  security: [{ bearerAuth: [] }],
+  request: { params: notificationParamsSchema },
+  responses: { 200: { description: "Notification marked read" } },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/workspaces/{workspaceId}/notifications/read-all",
+  tags: ["Notifications"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema },
+  responses: {
+    200: {
+      description: "All unread notifications for the current user marked read",
+    },
+  },
+});
+
+for (const method of ["get", "patch"] as const) {
+  registry.registerPath({
+    method,
+    path: "/api/v1/workspaces/{workspaceId}/notifications/preferences",
+    tags: ["Notifications"],
+    security: [{ bearerAuth: [] }],
+    request: {
+      params: workspaceIdParamsSchema,
+      ...(method === "patch" ? jsonBody(updateNotificationPreferenceSchema) : {}),
+    },
+    responses: { 200: { description: "Current user's notification preferences" } },
+  });
+}
 
 registry.registerPath({
   method: "get",
@@ -313,6 +438,60 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/projects/{projectId}",
+  tags: ["Projects"],
+  security: [{ bearerAuth: [] }],
+  request: { params: projectParamsSchema },
+  responses: { 200: { description: "Project details with creator and members" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/projects/{projectId}/members",
+  tags: ["Projects"],
+  security: [{ bearerAuth: [] }],
+  request: { params: projectParamsSchema },
+  responses: { 200: { description: "Project member summaries" } },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/v1/workspaces/{workspaceId}/projects/{projectId}/members",
+  tags: ["Projects"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: projectParamsSchema,
+    ...jsonBody(replaceProjectMembersSchema),
+  },
+  responses: { 200: { description: "Project membership replaced" } },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/workspaces/{workspaceId}/projects/{projectId}/visibility",
+  tags: ["Projects"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: projectParamsSchema,
+    ...jsonBody(updateProjectVisibilitySchema),
+  },
+  responses: { 200: { description: "Project visibility updated" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/projects/{projectId}/eligible-assignees",
+  tags: ["Projects"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: projectParamsSchema,
+    query: eligibleAssigneesQuerySchema,
+  },
+  responses: { 200: { description: "Active eligible task assignees" } },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/api/v1/workspaces/{workspaceId}/tasks",
   tags: ["Tasks"],
   security: [{ bearerAuth: [] }],
@@ -344,7 +523,10 @@ registry.registerPath({
     params: taskIdParamsSchema,
     ...jsonBody(updateTaskSchema),
   },
-  responses: { 200: { description: "Task updated (includes completedAt)" } },
+  responses: {
+    200: { description: "Task updated (includes completedAt)" },
+    409: { description: "Stale task version" },
+  },
 });
 
 registry.registerPath({
@@ -367,6 +549,7 @@ registry.registerPath({
   security: [{ bearerAuth: [] }],
   request: {
     params: taskIdParamsSchema,
+    query: deleteTaskQuerySchema,
   },
   responses: {
     200: { description: "Task soft-deleted" },
@@ -446,8 +629,8 @@ export function buildOpenApiDocument() {
     openapi: "3.0.3",
     info: {
       title: "TaskMng SME API",
-      version: "4.0.0",
-      description: "Phase 4 Dashboard, Tasks, Projects & Smart Capture API",
+      version: "5.0.0",
+      description: "Phase 5 Core Task Management & Assignment API",
     },
     servers: [{ url: "http://localhost:4000" }],
   });

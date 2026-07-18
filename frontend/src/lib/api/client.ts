@@ -161,6 +161,14 @@ export function patch<T>(
   return request<T>("PATCH", path, { ...options, body });
 }
 
+export function put<T>(
+  path: string,
+  body?: unknown,
+  options?: Omit<RequestOptions, "body">,
+) {
+  return request<T>("PUT", path, { ...options, body });
+}
+
 export function del<T>(path: string, options?: Omit<RequestOptions, "body">) {
   return request<T>("DELETE", path, options);
 }

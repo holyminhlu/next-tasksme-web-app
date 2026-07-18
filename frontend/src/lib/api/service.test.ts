@@ -20,6 +20,12 @@ describe("buildQueryString", () => {
     ).toBe("?a=1&e=0&f=false");
     expect(buildQueryString({})).toBe("");
   });
+
+  it("repeats array values", () => {
+    expect(buildQueryString({ status: ["TODO", "DONE"] })).toBe(
+      "?status=TODO&status=DONE",
+    );
+  });
 });
 
 describe("isRouteNotFound", () => {

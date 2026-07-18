@@ -1,20 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
+  canAssignToOtherMembers,
+  canManagePrivateProjectMembers,
   dateInputToIso,
   daysUntilDue,
   describeDueDate,
+  filterEligibleAssignees,
   formatAbsoluteDate,
+  formatTaskNumber,
   hasWorkspaceTaskScope,
+  initialsFromName,
+  isConflictError,
   isTaskOverdue,
+  mapBulkMutationResult,
   mapDeleteTaskResult,
   mapParseResult,
   mapProjectList,
+  mapProjectMemberList,
   mapTask,
+  mapTaskActivityList,
   mapTaskList,
   normalizeTaskPriority,
   normalizeTaskStatus,
+  parseTaskFilterState,
+  pastDueWarning,
+  removeFilterChip,
+  resolveTaskListViewPreset,
+  serializeTaskFilterState,
+  taskFilterStateToListFilters,
+  taskListViewPresetToFilterPatch,
   toDateInputValue,
   toLocalDateString,
+  validateTaskDates,
 } from "./tasks.helpers";
 
 const NOW = new Date("2026-07-17T12:00:00");
@@ -23,7 +40,8 @@ describe("normalizeTaskStatus / normalizeTaskPriority", () => {
   it("accepts canonical and loosely formatted values", () => {
     expect(normalizeTaskStatus("TODO")).toBe("TODO");
     expect(normalizeTaskStatus("in progress")).toBe("IN_PROGRESS");
-    expect(normalizeTaskStatus("in-progress")).toBe("IN_PROGRESS");
+    expect(normalizeTaskStatus("in-review")).toBe("IN_REVIEW");
+    expect(normalizeTaskStatus("blocked")).toBe("BLOCKED");
     expect(normalizeTaskStatus("done")).toBe("DONE");
     expect(normalizeTaskStatus("nonsense")).toBeNull();
     expect(normalizeTaskStatus(42)).toBeNull();
@@ -35,46 +53,71 @@ describe("normalizeTaskStatus / normalizeTaskPriority", () => {
 });
 
 describe("mapTask", () => {
-  it("maps a flat backend task", () => {
+  it("maps a flat backend task with Phase 5 fields", () => {
     const task = mapTask({
       id: "t1",
+      workspaceId: "ws1",
+      taskNumber: 42,
       title: "Prepare report",
-      status: "IN_PROGRESS",
+      status: "IN_REVIEW",
       priority: "HIGH",
+      startAt: "2026-07-18T00:00:00.000Z",
       dueDate: "2026-07-20T00:00:00.000Z",
       projectId: "p1",
       projectName: "Ops",
       assigneeId: "u1",
       assigneeName: "Ann",
+      createdById: "u2",
+      createdByName: "Bob",
+      version: 3,
+      blockedReason: "Waiting on legal",
+      isBlocked: true,
+      source: "MANUAL",
     });
 
     expect(task).toMatchObject({
       id: "t1",
+      workspaceId: "ws1",
+      taskNumber: 42,
       title: "Prepare report",
-      status: "IN_PROGRESS",
+      status: "IN_REVIEW",
       priority: "HIGH",
       projectId: "p1",
       projectName: "Ops",
       assigneeId: "u1",
       assigneeName: "Ann",
+      createdById: "u2",
+      createdByName: "Bob",
+      version: 3,
+      blockedReason: "Waiting on legal",
+      isBlocked: true,
+      source: "MANUAL",
     });
   });
 
-  it("maps nested project/assignee objects", () => {
+  it("maps nested project/assignee/creator objects", () => {
     const task = mapTask({
       id: "t2",
       title: "Nested",
-      project: { id: "p9", name: "Website" },
-      assignee: { id: "u9", fullName: "Bob Lee" },
+      project: { id: "p9", name: "Website", visibility: "PRIVATE" },
+      assignee: { id: "u9", fullName: "Bob Lee", role: "manager" },
+      creator: { id: "u1", fullName: "Ann" },
+      completedBy: { id: "u2", fullName: "Chris" },
     });
 
     expect(task).toMatchObject({
       projectId: "p9",
       projectName: "Website",
+      projectVisibility: "PRIVATE",
       assigneeId: "u9",
       assigneeName: "Bob Lee",
+      assigneeRole: "manager",
+      createdById: "u1",
+      createdByName: "Ann",
+      completedById: "u2",
+      completedByName: "Chris",
+      version: 1,
     });
-    // Defaults applied when fields are missing.
     expect(task?.status).toBe("TODO");
     expect(task?.priority).toBe("MEDIUM");
     expect(task?.isBlocked).toBe(false);
@@ -112,6 +155,7 @@ describe("mapDeleteTaskResult", () => {
       id: "t1",
       deleted: true,
       deletedAt: "2026-07-17T09:00:00.000Z",
+      version: null,
     });
   });
 
@@ -120,6 +164,7 @@ describe("mapDeleteTaskResult", () => {
       id: "t9",
       deleted: true,
       deletedAt: null,
+      version: null,
     });
   });
 });
@@ -166,7 +211,7 @@ describe("mapTaskList", () => {
 describe("mapProjectList", () => {
   it("maps arrays and skips malformed entries", () => {
     const projects = mapProjectList([
-      { id: "p1", name: "Ops", _count: { tasks: 5 } },
+      { id: "p1", name: "Ops", visibility: "PRIVATE", _count: { tasks: 5 } },
       { name: "missing id" },
     ]);
 
@@ -175,7 +220,11 @@ describe("mapProjectList", () => {
       id: "p1",
       name: "Ops",
       status: "ACTIVE",
+      visibility: "PRIVATE",
       totalTasks: 5,
+      memberIds: [],
+      members: [],
+      createdById: null,
     });
   });
 
@@ -194,6 +243,7 @@ describe("mapParseResult", () => {
         priority: "HIGH",
         status: "TODO",
         dueDate: "2026-07-18",
+        startAt: "2026-07-17",
         projectName: "Procurement",
         assigneeName: "Ann",
       },
@@ -207,20 +257,169 @@ describe("mapParseResult", () => {
       title: "Call supplier",
       priority: "HIGH",
       dueDate: "2026-07-18",
+      startAt: "2026-07-17",
     });
     expect(result?.missingFields).toEqual(["assigneeId"]);
     expect(result?.ambiguities).toHaveLength(1);
     expect(result?.projectCandidates).toEqual([
-      { id: "p1", name: "Procurement" },
+      { id: "p1", name: "Procurement", role: null, restricted: undefined },
     ]);
     expect(result?.assigneeCandidates).toEqual([
-      { id: "u1", name: "Ann Chu (a@b.co)" },
+      { id: "u1", name: "Ann Chu (a@b.co)", role: null, restricted: undefined },
     ]);
   });
 
   it("returns null when there is no usable draft title", () => {
     expect(mapParseResult({ draft: {} })).toBeNull();
     expect(mapParseResult(null)).toBeNull();
+  });
+});
+
+describe("activity / bulk / conflict helpers", () => {
+  it("maps activity lists", () => {
+    const result = mapTaskActivityList(
+      {
+        items: [
+          {
+            id: "a1",
+            summary: "Task created",
+            actor: { fullName: "Ann" },
+            createdAt: "2026-07-17T10:00:00.000Z",
+          },
+        ],
+      },
+      { pagination: { total: 1, page: 1, totalPages: 1 } },
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      id: "a1",
+      summary: "Task created",
+      actorName: "Ann",
+    });
+    expect(result.total).toBe(1);
+  });
+
+  it("maps bulk per-item results", () => {
+    const result = mapBulkMutationResult({
+      results: [
+        {
+          taskId: "t1",
+          success: true,
+          task: { id: "t1", title: "One", version: 2 },
+        },
+        {
+          taskId: "t2",
+          success: false,
+          error: { code: "CONFLICT", message: "stale" },
+        },
+      ],
+    });
+
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0]?.success).toBe(true);
+    expect(result.results[0]?.task?.version).toBe(2);
+    expect(result.results[1]).toMatchObject({
+      taskId: "t2",
+      success: false,
+      error: { code: "CONFLICT", message: "stale" },
+    });
+  });
+
+  it("detects conflict codes", () => {
+    expect(isConflictError("CONFLICT")).toBe(true);
+    expect(isConflictError("VERSION_CONFLICT")).toBe(true);
+    expect(isConflictError("FORBIDDEN")).toBe(false);
+  });
+});
+
+describe("filter URL parsing / serialization", () => {
+  it("parses multi status/priority and deadline flags", () => {
+    const params = new URLSearchParams(
+      "status=TODO&status=DONE&priority=HIGH&due=overdue&unassigned=true&sortBy=dueDate&sortOrder=asc&q=report&page=2",
+    );
+    const state = parseTaskFilterState(params);
+
+    expect(state.statuses).toEqual(["TODO", "DONE"]);
+    expect(state.priorities).toEqual(["HIGH"]);
+    expect(state.due).toBe("overdue");
+    expect(state.unassigned).toBe(true);
+    expect(state.sortBy).toBe("dueDate");
+    expect(state.sortOrder).toBe("asc");
+    expect(state.search).toBe("report");
+    expect(state.page).toBe(2);
+  });
+
+  it("serializes only active filter values", () => {
+    const serialized = serializeTaskFilterState({
+      search: "alpha",
+      projectId: "p1",
+      statuses: ["TODO"],
+      priorities: [],
+      assigneeId: null,
+      createdById: null,
+      due: "today",
+      deadlineFrom: null,
+      deadlineTo: null,
+      overdue: false,
+      unassigned: false,
+      includeArchived: false,
+      includeDeleted: false,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      page: 1,
+    });
+
+    expect(serialized.get("q")).toBe("alpha");
+    expect(serialized.get("projectId")).toBe("p1");
+    expect(serialized.getAll("status")).toEqual(["TODO"]);
+    expect(serialized.get("due")).toBe("today");
+    expect(serialized.get("sortBy")).toBeNull();
+    expect(serialized.get("page")).toBeNull();
+  });
+
+  it("builds list filters with default assignee and timezone", () => {
+    const filters = taskFilterStateToListFilters(
+      parseTaskFilterState(new URLSearchParams("status=TODO&due=today")),
+      { defaultAssigneeId: "me", timezone: "Asia/Bangkok", pageSize: 20 },
+    );
+
+    expect(filters).toMatchObject({
+      status: "TODO",
+      due: "today",
+      assigneeId: "me",
+      timezone: "Asia/Bangkok",
+      pageSize: 20,
+    });
+  });
+
+  it("removes individual filter chips", () => {
+    const state = parseTaskFilterState(
+      new URLSearchParams("status=TODO&status=DONE&priority=HIGH"),
+    );
+    expect(removeFilterChip(state, "status:TODO").statuses).toEqual(["DONE"]);
+    expect(removeFilterChip(state, "priority:HIGH").priorities).toEqual([]);
+  });
+});
+
+describe("date validation", () => {
+  it("requires due >= start", () => {
+    expect(
+      validateTaskDates("2026-07-20T00:00:00.000Z", "2026-07-18T00:00:00.000Z"),
+    ).toMatch(/Deadline/);
+    expect(
+      validateTaskDates("2026-07-18T00:00:00.000Z", "2026-07-20T00:00:00.000Z"),
+    ).toBeNull();
+  });
+
+  it("warns for past due dates", () => {
+    expect(pastDueWarning("2026-07-10T00:00:00.000Z", NOW)).toMatch(/past/);
+    expect(pastDueWarning("2026-07-20T00:00:00.000Z", NOW)).toBeNull();
+  });
+
+  it("formats task numbers", () => {
+    expect(formatTaskNumber(12)).toBe("#12");
+    expect(formatTaskNumber(null)).toBeNull();
   });
 });
 
@@ -277,5 +476,99 @@ describe("date formatting", () => {
     expect(toDateInputValue(iso)).toBe("2026-07-20");
     expect(dateInputToIso("")).toBeNull();
     expect(dateInputToIso("garbage")).toBeNull();
+  });
+});
+
+describe("assignment / membership helpers", () => {
+  const members = [
+    { id: "u1", name: "Ann", role: "member", status: "ACTIVE" },
+    { id: "u2", name: "Bob", role: "manager", status: "ACTIVE" },
+    { id: "u3", name: "Inactive", role: "member", status: "DISABLED" },
+  ];
+
+  it("scopes assignees to private project members", () => {
+    expect(
+      filterEligibleAssignees(members, { projectVisibility: "WORKSPACE" }),
+    ).toHaveLength(2);
+
+    expect(
+      filterEligibleAssignees(members, {
+        projectVisibility: "PRIVATE",
+        projectMemberIds: ["u2"],
+      }).map((member) => member.id),
+    ).toEqual(["u2"]);
+
+    expect(
+      filterEligibleAssignees(members, {
+        projectVisibility: "PRIVATE",
+        projectMembers: [{ id: "u1", name: "Ann", role: "member" }],
+      }).map((member) => member.id),
+    ).toEqual(["u1"]);
+  });
+
+  it("maps project member payloads and drops inactive", () => {
+    const mapped = mapProjectMemberList([
+      {
+        userId: "u1",
+        user: { fullName: "Ann", email: "a@x.com" },
+        role: { key: "member" },
+        status: "ACTIVE",
+      },
+      {
+        userId: "u9",
+        user: { fullName: "Gone" },
+        status: "DISABLED",
+      },
+    ]);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      userId: "u1",
+      fullName: "Ann",
+      roleKey: "member",
+    });
+  });
+
+  it("gates private membership management to owner/admin/creator", () => {
+    expect(
+      canManagePrivateProjectMembers({
+        roleKey: "member",
+        userId: "u1",
+        project: { visibility: "PRIVATE", createdById: "u1" },
+      }),
+    ).toBe(true);
+    expect(
+      canManagePrivateProjectMembers({
+        roleKey: "manager",
+        userId: "u2",
+        project: { visibility: "PRIVATE", createdById: "u1" },
+      }),
+    ).toBe(false);
+    expect(
+      canManagePrivateProjectMembers({
+        roleKey: "admin",
+        userId: "u2",
+        project: { visibility: "PRIVATE", createdById: "u1" },
+      }),
+    ).toBe(true);
+  });
+
+  it("treats member role as self-assign only", () => {
+    expect(canAssignToOtherMembers("owner")).toBe(true);
+    expect(canAssignToOtherMembers("member")).toBe(false);
+    expect(hasWorkspaceTaskScope("manager")).toBe(true);
+  });
+
+  it("builds initials and view presets", () => {
+    expect(initialsFromName("Ann Lee")).toBe("AL");
+    expect(initialsFromName("Ann")).toBe("AN");
+    expect(resolveTaskListViewPreset({ includeArchived: false, includeDeleted: true })).toBe(
+      "trash",
+    );
+    expect(taskListViewPresetToFilterPatch("archived")).toEqual({
+      includeArchived: true,
+      includeDeleted: false,
+      page: 1,
+    });
   });
 });

@@ -2,34 +2,60 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useMemo, useState } from "react";
-import { CheckSquare, Plus, Search, X } from "lucide-react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { CheckSquare, Plus, Search } from "lucide-react";
 import { hasPermission, useAuth } from "@/modules/auth";
 import {
   Badge,
   Button,
+  Checkbox,
   EmptyState,
   ErrorState,
   ForbiddenState,
   LoadingState,
   Pagination,
-  Select,
-  TextInput,
+  Table,
 } from "@/modules/design-system";
 import { useWidget } from "@/modules/dashboard";
+import { listMembers } from "@/modules/workspaces/members.service";
+import {
+  COLUMN_LABELS,
+  TaskFilterBar,
+  loadVisibleColumns,
+  saveVisibleColumns,
+  type TaskColumnKey,
+} from "@/modules/tasks/components/TaskFilterBar";
+import { TaskBulkActionBar } from "@/modules/tasks/components/TaskBulkActionBar";
 import {
   TASK_PRIORITY_LABELS,
   TASK_PRIORITY_TONES,
-  TASK_STATUSES,
   TASK_STATUS_LABELS,
+  TASK_STATUS_TONES,
   TaskDetailDialog,
   TaskQuickComplete,
   TaskStatusMenu,
   describeDueDate,
   formatAbsoluteDate,
+  formatTaskNumber,
   hasWorkspaceTaskScope,
-  normalizeTaskStatus,
+  parseTaskFilterState,
+  resolveTaskListViewPreset,
+  serializeTaskFilterState,
+  subscribeTasksChanged,
+  taskFilterHasActiveFilters,
+  taskFilterStateToListFilters,
+  taskListViewPresetToFilterPatch,
   tasksService,
+  type CandidateOption,
+  type TaskFilterState,
+  type TaskListViewPreset,
   type TaskRecord,
 } from "@/modules/tasks";
 import { PageHeader, useShell } from "@/modules/shell";
@@ -37,12 +63,6 @@ import styles from "../app-pages.module.css";
 import pageStyles from "./my-tasks.module.css";
 
 const PAGE_SIZE = 20;
-
-type DueFilter = "today" | "overdue" | null;
-
-function parseDueParam(value: string | null): DueFilter {
-  return value === "today" || value === "overdue" ? value : null;
-}
 
 function MyTasksContent() {
   const router = useRouter();
@@ -54,80 +74,115 @@ function MyTasksContent() {
   const workspaceId = selectedWorkspace?.id ?? null;
   const canUpdate = hasPermission(permissions, "tasks:update");
   const canPickProject = hasPermission(permissions, "projects:read");
-
-  // Owner/admin/manager see the whole workspace by default on the backend;
-  // "My tasks" narrows to tasks assigned to the current user. Members are
-  // already scoped server-side to their own tasks.
-  const assigneeId =
-    hasWorkspaceTaskScope(selectedWorkspace?.roleKey) && profile
-      ? profile.id
-      : null;
+  const canFilterMembers = hasPermission(permissions, "members:read");
+  const canIncludeDeleted =
+    selectedWorkspace?.roleKey === "owner" ||
+    selectedWorkspace?.roleKey === "admin";
+  const canRestore = canIncludeDeleted;
 
   const timezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     [],
   );
 
-  // Filters live in the URL so dashboard drill-down links work directly.
-  const status = normalizeTaskStatus(searchParams.get("status"));
-  const due = parseDueParam(searchParams.get("due"));
-  const projectId = searchParams.get("projectId");
-  const search = searchParams.get("q") ?? "";
-  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const filterState = useMemo(
+    () => parseTaskFilterState(searchParams),
+    [searchParams],
+  );
+  const viewPreset = resolveTaskListViewPreset(filterState);
+  // Phase 4: workspace-scope roles default to tasks assigned to the current
+  // user unless assignee/unassigned is set explicitly in the URL.
+  const listDefaultAssignee =
+    hasWorkspaceTaskScope(selectedWorkspace?.roleKey) && profile
+      ? profile.id
+      : null;
 
-  const [searchInput, setSearchInput] = useState(search);
   const [selectedTask, setSelectedTask] = useState<TaskRecord | null>(null);
   const [overrides, setOverrides] = useState<Record<string, TaskRecord>>({});
-  // Deleted tasks disappear immediately; a reload then fixes totals/pages.
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<TaskColumnKey[]>(
+    () => loadVisibleColumns(),
+  );
+  const [projects, setProjects] = useState<CandidateOption[]>([]);
+  const [members, setMembers] = useState<CandidateOption[]>([]);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
-  const setParams = useCallback(
-    (updates: Record<string, string | null>) => {
-      const next = new URLSearchParams(searchParams.toString());
-
-      for (const [key, value] of Object.entries(updates)) {
-        if (value === null || value === "") {
-          next.delete(key);
-        } else {
-          next.set(key, value);
-        }
-      }
-
-      // Any filter change restarts pagination.
-      if (!("page" in updates)) {
-        next.delete("page");
-      }
-
+  const setFilterPatch = useCallback(
+    (patch: Partial<TaskFilterState>) => {
+      const nextState: TaskFilterState = {
+        ...filterState,
+        ...patch,
+        page: "page" in patch ? (patch.page ?? 1) : 1,
+      };
+      const next = serializeTaskFilterState(nextState);
       const query = next.toString();
       router.replace(query ? `${pathname}?${query}` : pathname);
     },
-    [router, pathname, searchParams],
+    [filterState, router, pathname],
   );
 
   const fetcher = useCallback(
     () =>
-      tasksService.listTasks(workspaceId ?? "", {
-        status,
-        projectId,
-        assigneeId,
-        search: search || null,
-        due,
-        timezone: due ? timezone : null,
-        page,
-        pageSize: PAGE_SIZE,
-      }),
-    [workspaceId, status, projectId, assigneeId, search, due, timezone, page],
+      tasksService.listTasks(
+        workspaceId ?? "",
+        taskFilterStateToListFilters(filterState, {
+          defaultAssigneeId: listDefaultAssignee,
+          timezone,
+          pageSize: PAGE_SIZE,
+        }),
+      ),
+    [workspaceId, filterState, listDefaultAssignee, timezone],
   );
 
   const state = useWidget(workspaceId ? fetcher : null);
 
-  const projectsFetcher = useCallback(
-    () => tasksService.listProjects(workspaceId ?? ""),
-    [workspaceId],
-  );
-  const projects = useWidget(
-    workspaceId && canPickProject ? projectsFetcher : null,
-  );
+  useEffect(() => subscribeTasksChanged(() => state.reload()), [state]);
+
+  useEffect(() => {
+    if (!workspaceId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    if (canPickProject) {
+      void tasksService.listProjects(workspaceId).then((result) => {
+        if (!cancelled && result.ok) {
+          setProjects(
+            result.data.map((project) => ({
+              id: project.id,
+              name:
+                project.visibility === "PRIVATE"
+                  ? `${project.name} (private)`
+                  : project.name,
+              restricted: project.visibility === "PRIVATE",
+            })),
+          );
+        }
+      });
+    }
+
+    if (canFilterMembers) {
+      void listMembers(workspaceId).then((result) => {
+        if (!cancelled && result.success) {
+          setMembers(
+            result.data
+              .filter((member) => member.status === "ACTIVE")
+              .map((member) => ({
+                id: member.user.id,
+                name: member.user.fullName,
+                role: member.role.key,
+              })),
+          );
+        }
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, canPickProject, canFilterMembers]);
 
   const locale =
     typeof navigator !== "undefined" ? navigator.language : undefined;
@@ -137,7 +192,7 @@ function MyTasksContent() {
   const tasksModuleDisabled =
     modulesKnown && !navContext.enabledModuleKeys!.includes("tasks");
 
-  const hasFilters = Boolean(status || due || projectId || search);
+  const hasFilters = taskFilterHasActiveFilters(filterState);
 
   const items = useMemo(
     () =>
@@ -147,13 +202,24 @@ function MyTasksContent() {
     [state.data?.items, overrides, deletedIds],
   );
 
-  // Only subtract deletions the current payload still contains; once the
-  // post-delete reload lands, the server total is already correct.
   const deletedInPage = deletedIds.filter((id) =>
     (state.data?.items ?? []).some((task) => task.id === id),
   ).length;
-  const total = Math.max(items.length, (state.data?.total ?? 0) - deletedInPage);
+  const total = Math.max(
+    items.length,
+    (state.data?.total ?? 0) - deletedInPage,
+  );
   const totalPages = state.data ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1;
+
+  const allSelected =
+    items.length > 0 && items.every((task) => selectedIds.includes(task.id));
+  const someSelected = items.some((task) => selectedIds.includes(task.id));
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelected && !allSelected;
+    }
+  }, [someSelected, allSelected]);
 
   function applyUpdate(task: TaskRecord) {
     setOverrides((current) => ({ ...current, [task.id]: task }));
@@ -164,10 +230,56 @@ function MyTasksContent() {
     setDeletedIds((current) =>
       current.includes(taskId) ? current : [...current, taskId],
     );
+    setSelectedIds((current) => current.filter((id) => id !== taskId));
     setSelectedTask((current) => (current?.id === taskId ? null : current));
-    // Refetch so the server total and pagination stay accurate.
     state.reload();
   }
+
+  async function handleRestore(task: TaskRecord) {
+    if (!workspaceId || !canRestore) {
+      return;
+    }
+
+    const result = await tasksService.restoreTask(workspaceId, task.id, {
+      version: task.version,
+    });
+
+    if (!result.ok) {
+      return;
+    }
+
+    applyUpdate(result.data);
+    setDeletedIds((current) => current.filter((id) => id !== task.id));
+    state.reload();
+  }
+
+  function setViewPreset(preset: TaskListViewPreset) {
+    setFilterPatch(taskListViewPresetToFilterPatch(preset));
+  }
+
+  function handleVisibleColumnsChange(columns: TaskColumnKey[]) {
+    setVisibleColumns(columns);
+    saveVisibleColumns(columns);
+  }
+
+  function toggleSelect(taskId: string) {
+    setSelectedIds((current) =>
+      current.includes(taskId)
+        ? current.filter((id) => id !== taskId)
+        : [...current, taskId],
+    );
+  }
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(items.map((task) => task.id));
+  }
+
+  const selectedTasks = items.filter((task) => selectedIds.includes(task.id));
+  const show = (key: TaskColumnKey) => visibleColumns.includes(key);
 
   if (!hasPermission(permissions, "tasks:read")) {
     return (
@@ -182,7 +294,13 @@ function MyTasksContent() {
     <div className={styles.stack}>
       <PageHeader
         title="My tasks"
-        description="Tasks assigned to you across all projects in this workspace."
+        description={
+          viewPreset === "trash"
+            ? "Deleted tasks you can restore (owner/admin)."
+            : viewPreset === "archived"
+              ? "Archived tasks across this workspace."
+              : "Tasks assigned to you across all projects in this workspace."
+        }
         actions={
           hasPermission(permissions, "tasks:create") && !tasksModuleDisabled ? (
             <Button
@@ -208,114 +326,72 @@ function MyTasksContent() {
         />
       ) : (
         <>
-          <form
-            className={pageStyles.filters}
-            role="search"
-            aria-label="Task filters"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setParams({ q: searchInput.trim() || null });
-            }}
+          <div
+            className={pageStyles.viewPresets}
+            role="tablist"
+            aria-label="Task views"
           >
-            <div
-              className={`${pageStyles.filterField} ${pageStyles.searchField}`}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewPreset === "active"}
+              className={`${pageStyles.viewPreset} ${viewPreset === "active" ? pageStyles.viewPresetActive : ""}`.trim()}
+              onClick={() => setViewPreset("active")}
             >
-              <label className={pageStyles.filterLabel} htmlFor="task-search">
-                Search
-              </label>
-              <TextInput
-                id="task-search"
-                type="search"
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                onBlur={() => setParams({ q: searchInput.trim() || null })}
-                placeholder="Search tasks…"
-              />
-            </div>
-
-            <div className={pageStyles.filterField}>
-              <label className={pageStyles.filterLabel} htmlFor="task-status">
-                Status
-              </label>
-              <Select
-                id="task-status"
-                value={status ?? ""}
-                onChange={(event) =>
-                  setParams({ status: event.target.value || null })
-                }
+              Active
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewPreset === "archived"}
+              className={`${pageStyles.viewPreset} ${viewPreset === "archived" ? pageStyles.viewPresetActive : ""}`.trim()}
+              onClick={() => setViewPreset("archived")}
+            >
+              Archived
+            </button>
+            {canIncludeDeleted && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={viewPreset === "trash"}
+                className={`${pageStyles.viewPreset} ${viewPreset === "trash" ? pageStyles.viewPresetActive : ""}`.trim()}
+                onClick={() => setViewPreset("trash")}
               >
-                <option value="">All statuses</option>
-                {TASK_STATUSES.map((key) => (
-                  <option key={key} value={key}>
-                    {TASK_STATUS_LABELS[key]}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className={pageStyles.filterField}>
-              <label className={pageStyles.filterLabel} htmlFor="task-due">
-                Due
-              </label>
-              <Select
-                id="task-due"
-                value={due ?? ""}
-                onChange={(event) =>
-                  setParams({ due: event.target.value || null })
-                }
-              >
-                <option value="">Any due date</option>
-                <option value="today">Due today</option>
-                <option value="overdue">Overdue</option>
-              </Select>
-            </div>
-
-            {canPickProject && (
-              <div className={pageStyles.filterField}>
-                <label
-                  className={pageStyles.filterLabel}
-                  htmlFor="task-project"
-                >
-                  Project
-                </label>
-                <Select
-                  id="task-project"
-                  value={projectId ?? ""}
-                  onChange={(event) =>
-                    setParams({ projectId: event.target.value || null })
-                  }
-                >
-                  <option value="">All projects</option>
-                  {(projects.data ?? []).map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+                Trash
+              </button>
             )}
+          </div>
 
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className={pageStyles.clearButton}
-                iconLeft={<X size={14} aria-hidden />}
-                onClick={() => {
-                  setSearchInput("");
-                  setParams({
-                    status: null,
-                    due: null,
-                    projectId: null,
-                    q: null,
-                    page: null,
-                  });
-                }}
-              >
-                Clear filters
-              </Button>
-            )}
-          </form>
+          <TaskFilterBar
+            state={filterState}
+            onChange={setFilterPatch}
+            projects={projects}
+            members={members}
+            canPickProject={canPickProject}
+            canFilterMembers={canFilterMembers}
+            canIncludeDeleted={canIncludeDeleted}
+            visibleColumns={visibleColumns}
+            onVisibleColumnsChange={handleVisibleColumnsChange}
+          />
+
+          {selectedTasks.length > 0 && (
+            <TaskBulkActionBar
+              selectedTasks={selectedTasks}
+              projects={projects}
+              members={members}
+              onClear={() => setSelectedIds([])}
+              onComplete={(updated, removed) => {
+                for (const task of updated) {
+                  applyUpdate(task);
+                }
+                for (const id of removed) {
+                  applyDelete(id);
+                }
+                setSelectedIds([]);
+                state.reload();
+              }}
+            />
+          )}
 
           {state.loading ? (
             <LoadingState label="Loading tasks..." />
@@ -340,16 +416,24 @@ function MyTasksContent() {
                 hasFilters ? (
                   <Button
                     variant="secondary"
-                    onClick={() => {
-                      setSearchInput("");
-                      setParams({
-                        status: null,
-                        due: null,
+                    onClick={() =>
+                      setFilterPatch({
+                        search: "",
                         projectId: null,
-                        q: null,
-                        page: null,
-                      });
-                    }}
+                        statuses: [],
+                        priorities: [],
+                        assigneeId: null,
+                        createdById: null,
+                        due: null,
+                        deadlineFrom: null,
+                        deadlineTo: null,
+                        overdue: false,
+                        unassigned: false,
+                        includeArchived: false,
+                        includeDeleted: false,
+                        page: 1,
+                      })
+                    }
                   >
                     Clear filters
                   </Button>
@@ -368,63 +452,259 @@ function MyTasksContent() {
                 {hasFilters ? " matching filters" : ""}
                 {state.refreshing ? " · refreshing…" : ""}
               </p>
-              <ul className={pageStyles.taskList}>
+
+              <div className={pageStyles.desktopTable}>
+                <Table aria-label="Tasks">
+                  <thead>
+                    <tr>
+                      <th scope="col" className={pageStyles.selectCol}>
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={toggleSelectAll}
+                          aria-label="Select all tasks on this page"
+                        />
+                      </th>
+                      {show("taskNumber") && (
+                        <th scope="col">{COLUMN_LABELS.taskNumber}</th>
+                      )}
+                      {show("title") && (
+                        <th scope="col">{COLUMN_LABELS.title}</th>
+                      )}
+                      {show("status") && (
+                        <th scope="col">{COLUMN_LABELS.status}</th>
+                      )}
+                      {show("priority") && (
+                        <th scope="col">{COLUMN_LABELS.priority}</th>
+                      )}
+                      {show("project") && (
+                        <th scope="col">{COLUMN_LABELS.project}</th>
+                      )}
+                      {show("assignee") && (
+                        <th scope="col">{COLUMN_LABELS.assignee}</th>
+                      )}
+                      {show("startAt") && (
+                        <th scope="col">{COLUMN_LABELS.startAt}</th>
+                      )}
+                      {show("dueDate") && (
+                        <th scope="col">{COLUMN_LABELS.dueDate}</th>
+                      )}
+                      {show("actions") && (
+                        <th scope="col">{COLUMN_LABELS.actions}</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((task) => {
+                      const dueInfo = describeDueDate(task, now);
+                      return (
+                        <tr key={task.id}>
+                          <td className={pageStyles.selectCol}>
+                            <Checkbox
+                              label={
+                                <span className={pageStyles.srOnly}>
+                                  Select {task.title}
+                                </span>
+                              }
+                              checked={selectedIds.includes(task.id)}
+                              onChange={() => toggleSelect(task.id)}
+                            />
+                          </td>
+                          {show("taskNumber") && (
+                            <td>{formatTaskNumber(task.taskNumber) ?? "—"}</td>
+                          )}
+                          {show("title") && (
+                            <td>
+                              <button
+                                type="button"
+                                className={pageStyles.titleButton}
+                                onClick={() => setSelectedTask(task)}
+                              >
+                                <span
+                                  className={`${pageStyles.taskTitle} ${task.status === "DONE" ? pageStyles.taskTitleDone : ""}`.trim()}
+                                >
+                                  {task.title}
+                                </span>
+                              </button>
+                            </td>
+                          )}
+                          {show("status") && (
+                            <td>
+                              <Badge
+                                tone={TASK_STATUS_TONES[task.status]}
+                                withDot
+                              >
+                                {TASK_STATUS_LABELS[task.status]}
+                              </Badge>
+                            </td>
+                          )}
+                          {show("priority") && (
+                            <td>
+                              <Badge tone={TASK_PRIORITY_TONES[task.priority]}>
+                                {TASK_PRIORITY_LABELS[task.priority]}
+                              </Badge>
+                            </td>
+                          )}
+                          {show("project") && (
+                            <td>{task.projectName ?? "—"}</td>
+                          )}
+                          {show("assignee") && (
+                            <td>
+                              {task.assigneeName ??
+                                (task.assigneeId === profile?.id
+                                  ? "You"
+                                  : "—")}
+                            </td>
+                          )}
+                          {show("startAt") && (
+                            <td>
+                              {formatAbsoluteDate(task.startAt, locale) ?? "—"}
+                            </td>
+                          )}
+                          {show("dueDate") && (
+                            <td>
+                              <span className={pageStyles.dueCell}>
+                                {formatAbsoluteDate(task.dueDate, locale) ??
+                                  "—"}
+                                {dueInfo && (
+                                  <Badge tone={dueInfo.tone} withDot>
+                                    {dueInfo.label}
+                                  </Badge>
+                                )}
+                              </span>
+                            </td>
+                          )}
+                          {show("actions") && (
+                            <td>
+                              <span className={pageStyles.taskActions}>
+                                {viewPreset === "trash" && canRestore ? (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => void handleRestore(task)}
+                                  >
+                                    Restore
+                                  </Button>
+                                ) : (
+                                  <>
+                                    <TaskQuickComplete
+                                      task={task}
+                                      onUpdated={applyUpdate}
+                                      disabled={!canUpdate || Boolean(task.deletedAt)}
+                                    />
+                                    <TaskStatusMenu
+                                      task={task}
+                                      onUpdated={applyUpdate}
+                                      disabled={!canUpdate || Boolean(task.deletedAt)}
+                                    />
+                                  </>
+                                )}
+                              </span>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+              </div>
+
+              <ul className={pageStyles.mobileCards}>
                 {items.map((task) => {
                   const dueInfo = describeDueDate(task, now);
-                  const dueAbsolute = formatAbsoluteDate(task.dueDate, locale);
-
                   return (
-                    <li key={task.id} className={pageStyles.taskRow}>
-                      <TaskQuickComplete
-                        task={task}
-                        onUpdated={applyUpdate}
-                        disabled={!canUpdate}
-                      />
-                      <button
-                        type="button"
-                        className={pageStyles.taskMain}
-                        onClick={() => setSelectedTask(task)}
-                        aria-label={`Open details for "${task.title}"`}
-                      >
-                        <span
-                          className={`${pageStyles.taskTitle} ${task.status === "DONE" ? pageStyles.taskTitleDone : ""}`.trim()}
-                        >
-                          {task.title}
-                        </span>
-                        <span className={pageStyles.taskMeta}>
-                          {task.projectName && <span>{task.projectName}</span>}
-                          {dueAbsolute && <span>{dueAbsolute}</span>}
-                          {dueInfo && (
-                            <Badge tone={dueInfo.tone} withDot>
-                              {dueInfo.label}
-                            </Badge>
-                          )}
-                          {task.isBlocked && (
-                            <Badge tone="danger">Blocked</Badge>
-                          )}
-                        </span>
-                      </button>
-                      <span className={pageStyles.taskActions}>
-                        <Badge tone={TASK_PRIORITY_TONES[task.priority]}>
-                          {TASK_PRIORITY_LABELS[task.priority]}
-                        </Badge>
-                        <TaskStatusMenu
+                    <li key={task.id} className={pageStyles.mobileCard}>
+                      <div className={pageStyles.mobileCardHeader}>
+                        <Checkbox
+                          label={
+                            <span className={pageStyles.srOnly}>
+                              Select {task.title}
+                            </span>
+                          }
+                          checked={selectedIds.includes(task.id)}
+                          onChange={() => toggleSelect(task.id)}
+                        />
+                        <TaskQuickComplete
                           task={task}
                           onUpdated={applyUpdate}
                           disabled={!canUpdate}
                         />
-                      </span>
+                        <button
+                          type="button"
+                          className={pageStyles.titleButton}
+                          onClick={() => setSelectedTask(task)}
+                        >
+                          <span className={pageStyles.taskNumber}>
+                            {formatTaskNumber(task.taskNumber)}
+                          </span>
+                          <span
+                            className={`${pageStyles.taskTitle} ${task.status === "DONE" ? pageStyles.taskTitleDone : ""}`.trim()}
+                          >
+                            {task.title}
+                          </span>
+                        </button>
+                      </div>
+                      <div className={pageStyles.taskMeta}>
+                        <Badge tone={TASK_STATUS_TONES[task.status]} withDot>
+                          {TASK_STATUS_LABELS[task.status]}
+                        </Badge>
+                        <Badge tone={TASK_PRIORITY_TONES[task.priority]}>
+                          {TASK_PRIORITY_LABELS[task.priority]}
+                        </Badge>
+                        {task.projectName && <span>{task.projectName}</span>}
+                        {(task.assigneeName ||
+                          task.assigneeId === profile?.id) && (
+                          <span>
+                            {task.assigneeName ??
+                              (task.assigneeId === profile?.id ? "You" : "")}
+                          </span>
+                        )}
+                        {formatAbsoluteDate(task.startAt, locale) && (
+                          <span>
+                            Start {formatAbsoluteDate(task.startAt, locale)}
+                          </span>
+                        )}
+                        {formatAbsoluteDate(task.dueDate, locale) && (
+                          <span>
+                            Due {formatAbsoluteDate(task.dueDate, locale)}
+                          </span>
+                        )}
+                        {dueInfo && (
+                          <Badge tone={dueInfo.tone} withDot>
+                            {dueInfo.label}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className={pageStyles.taskActions}>
+                        {viewPreset === "trash" && canRestore ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void handleRestore(task)}
+                          >
+                            Restore
+                          </Button>
+                        ) : (
+                          <TaskStatusMenu
+                            task={task}
+                            onUpdated={applyUpdate}
+                            disabled={!canUpdate || Boolean(task.deletedAt)}
+                          />
+                        )}
+                      </div>
                     </li>
                   );
                 })}
               </ul>
+
               {totalPages > 1 && (
                 <div className={pageStyles.paginationRow}>
                   <Pagination
-                    page={page}
+                    page={filterState.page}
                     pageCount={totalPages}
                     onPageChange={(nextPage) =>
-                      setParams({ page: String(nextPage) })
+                      setFilterPatch({ page: nextPage })
                     }
                     aria-label="Task pages"
                   />

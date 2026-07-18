@@ -65,7 +65,7 @@ export function MobileNavDrawer() {
     setMobileNavOpen,
     pinnedNavIds,
     setNotificationsOpen,
-    unreadNotificationIds,
+    unreadNotificationCount,
   } = useShell();
 
   const routes = sidebarRoutes(navContext);
@@ -122,8 +122,8 @@ export function MobileNavDrawer() {
           >
             <Bell size={18} aria-hidden />
             Notifications
-            {unreadNotificationIds.length > 0 &&
-              ` (${unreadNotificationIds.length})`}
+            {unreadNotificationCount > 0 &&
+              ` (${unreadNotificationCount})`}
           </button>
         </div>
       </div>

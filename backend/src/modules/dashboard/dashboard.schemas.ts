@@ -16,13 +16,13 @@ export const dashboardQuerySchema = z.object({
   memberId: z.string().uuid().optional(),
   status: z
     .union([
-      z.enum(["TODO", "IN_PROGRESS", "DONE", "CANCELLED"]),
-      z.array(z.enum(["TODO", "IN_PROGRESS", "DONE", "CANCELLED"])),
+      z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "BLOCKED", "DONE", "CANCELLED"]),
+      z.array(
+        z.enum(["TODO", "IN_PROGRESS", "IN_REVIEW", "BLOCKED", "DONE", "CANCELLED"]),
+      ),
     ])
     .optional()
-    .transform((value) =>
-      Array.isArray(value) ? value : value ? [value] : undefined,
-    ),
+    .transform((value) => (Array.isArray(value) ? value : value ? [value] : undefined)),
 });
 
 export const myWorkQuerySchema = dashboardQuerySchema.extend({

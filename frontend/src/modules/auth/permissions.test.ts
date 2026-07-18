@@ -40,6 +40,17 @@ describe("permissions", () => {
     );
   });
 
+  it("grants tasks:assign to all roles (members self-assign only in the service)", () => {
+    expect(hasPermission(permissionsForRole("owner"), "tasks:assign")).toBe(true);
+    expect(hasPermission(permissionsForRole("admin"), "tasks:assign")).toBe(true);
+    expect(hasPermission(permissionsForRole("manager"), "tasks:assign")).toBe(
+      true,
+    );
+    expect(hasPermission(permissionsForRole("member"), "tasks:assign")).toBe(
+      true,
+    );
+  });
+
   it("requires every permission when given an array", () => {
     const permissions = permissionsForRole("manager");
     expect(

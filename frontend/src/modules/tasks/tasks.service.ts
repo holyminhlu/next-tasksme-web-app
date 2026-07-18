@@ -1,30 +1,44 @@
-import { del, get, patch, post } from "@/lib/api/client";
+import { del, get, patch, post, put } from "@/lib/api/client";
 import { buildQueryString } from "@/lib/api/query";
 import {
   MAPPING_ERROR,
   toServiceResult,
   type ServiceResult,
 } from "@/lib/api/service";
-import {
-  mapDeleteTaskResult,
-  mapParseResult,
-  mapProject,
-  mapProjectList,
-  mapTask,
-  mapTaskList,
-} from "./tasks.helpers";
 import type {
+  AssigneeMutationInput,
+  BulkDeleteInput,
+  BulkMutationResult,
+  BulkUpdateInput,
+  CandidateOption,
   CreateProjectInput,
   CreateTaskInput,
   DeleteTaskResult,
   ParseTaskInput,
   ParseTaskResult,
+  ProjectMemberSummary,
   ProjectRecord,
+  StatusMutationInput,
+  TaskActivityResult,
   TaskListFilters,
   TaskListResult,
   TaskRecord,
+  UpdateProjectInput,
   UpdateTaskInput,
+  VersionMutationInput,
 } from "./tasks.types";
+import {
+  mapBulkMutationResult,
+  mapCandidates,
+  mapDeleteTaskResult,
+  mapParseResult,
+  mapProject,
+  mapProjectList,
+  mapProjectMemberList,
+  mapTask,
+  mapTaskActivityList,
+  mapTaskList,
+} from "./tasks.helpers";
 
 function requireMapped<T>(result: ServiceResult<T | null>): ServiceResult<T> {
   if (result.ok && result.data === null) {
@@ -32,6 +46,44 @@ function requireMapped<T>(result: ServiceResult<T | null>): ServiceResult<T> {
   }
 
   return result as ServiceResult<T>;
+}
+
+function asListParam<T extends string>(
+  value: T | T[] | null | undefined,
+): T | T[] | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  return value;
+}
+
+/** Query params for listTasks — aligns with Phase 5 list contract. */
+export function buildTaskListQueryParams(
+  filters: TaskListFilters,
+): Record<string, string | number | boolean | string[] | null | undefined> {
+  return {
+    search: filters.search,
+    projectId: asListParam(
+      filters.projectId as string | string[] | null | undefined,
+    ),
+    status: asListParam(filters.status),
+    priority: asListParam(filters.priority),
+    assigneeId: filters.assigneeId,
+    createdById: filters.createdById,
+    due: filters.due,
+    deadlineFrom: filters.deadlineFrom,
+    deadlineTo: filters.deadlineTo,
+    overdue: filters.overdue || undefined,
+    unassigned: filters.unassigned || undefined,
+    includeArchived: filters.includeArchived || undefined,
+    includeDeleted: filters.includeDeleted || undefined,
+    timezone: filters.timezone,
+    page: filters.page,
+    pageSize: filters.pageSize,
+    sortBy: filters.sortBy,
+    sortOrder: filters.sortOrder,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -42,19 +94,8 @@ export async function listTasks(
   workspaceId: string,
   filters: TaskListFilters = {},
 ): Promise<ServiceResult<TaskListResult>> {
-  const params = {
-    status: filters.status,
-    projectId: filters.projectId,
-    assigneeId: filters.assigneeId,
-    search: filters.search,
-    due: filters.due,
-    timezone: filters.timezone,
-    page: filters.page,
-    pageSize: filters.pageSize,
-  };
-
   const envelope = await get<unknown>(
-    `/workspaces/${workspaceId}/tasks${buildQueryString(params)}`,
+    `/workspaces/${workspaceId}/tasks${buildQueryString(buildTaskListQueryParams(filters))}`,
   );
 
   return toServiceResult(envelope, (data, meta) => mapTaskList(data, meta));
@@ -96,17 +137,125 @@ export async function updateTask(
   return requireMapped(toServiceResult(envelope, (data) => mapTask(data)));
 }
 
+export async function updateTaskStatus(
+  workspaceId: string,
+  taskId: string,
+  input: StatusMutationInput,
+): Promise<ServiceResult<TaskRecord>> {
+  const envelope = await patch<unknown>(
+    `/workspaces/${workspaceId}/tasks/${taskId}/status`,
+    input,
+  );
+
+  return requireMapped(toServiceResult(envelope, (data) => mapTask(data)));
+}
+
+export async function updateTaskAssignee(
+  workspaceId: string,
+  taskId: string,
+  input: AssigneeMutationInput,
+): Promise<ServiceResult<TaskRecord>> {
+  const envelope = await patch<unknown>(
+    `/workspaces/${workspaceId}/tasks/${taskId}/assignee`,
+    input,
+  );
+
+  return requireMapped(toServiceResult(envelope, (data) => mapTask(data)));
+}
+
+export async function archiveTask(
+  workspaceId: string,
+  taskId: string,
+  input: VersionMutationInput,
+): Promise<ServiceResult<TaskRecord>> {
+  const envelope = await post<unknown>(
+    `/workspaces/${workspaceId}/tasks/${taskId}/archive`,
+    input,
+  );
+
+  return requireMapped(toServiceResult(envelope, (data) => mapTask(data)));
+}
+
+export async function unarchiveTask(
+  workspaceId: string,
+  taskId: string,
+  input: VersionMutationInput,
+): Promise<ServiceResult<TaskRecord>> {
+  const envelope = await post<unknown>(
+    `/workspaces/${workspaceId}/tasks/${taskId}/unarchive`,
+    input,
+  );
+
+  return requireMapped(toServiceResult(envelope, (data) => mapTask(data)));
+}
+
+export async function restoreTask(
+  workspaceId: string,
+  taskId: string,
+  input: VersionMutationInput,
+): Promise<ServiceResult<TaskRecord>> {
+  const envelope = await post<unknown>(
+    `/workspaces/${workspaceId}/tasks/${taskId}/restore`,
+    input,
+  );
+
+  return requireMapped(toServiceResult(envelope, (data) => mapTask(data)));
+}
+
 export async function deleteTask(
   workspaceId: string,
   taskId: string,
+  version?: number,
 ): Promise<ServiceResult<DeleteTaskResult>> {
+  const query = version != null ? buildQueryString({ version }) : "";
   const envelope = await del<unknown>(
-    `/workspaces/${workspaceId}/tasks/${taskId}`,
+    `/workspaces/${workspaceId}/tasks/${taskId}${query}`,
   );
 
   return toServiceResult(envelope, (data) =>
     mapDeleteTaskResult(data, taskId),
   );
+}
+
+export async function getTaskActivity(
+  workspaceId: string,
+  taskId: string,
+  options: { page?: number; pageSize?: number } = {},
+): Promise<ServiceResult<TaskActivityResult>> {
+  const envelope = await get<unknown>(
+    `/workspaces/${workspaceId}/tasks/${taskId}/activity${buildQueryString({
+      page: options.page,
+      pageSize: options.pageSize,
+    })}`,
+  );
+
+  return toServiceResult(envelope, (data, meta) =>
+    mapTaskActivityList(data, meta),
+  );
+}
+
+export async function bulkUpdateTasks(
+  workspaceId: string,
+  input: BulkUpdateInput,
+): Promise<ServiceResult<BulkMutationResult>> {
+  const envelope = await post<unknown>(
+    `/workspaces/${workspaceId}/tasks/bulk-update`,
+    input,
+  );
+
+  return toServiceResult(envelope, (data) => mapBulkMutationResult(data));
+}
+
+export async function bulkDeleteTasks(
+  workspaceId: string,
+  input: BulkDeleteInput,
+): Promise<ServiceResult<BulkMutationResult>> {
+  const envelope = await post<unknown>(
+    `/workspaces/${workspaceId}/tasks/bulk-delete`,
+    input,
+  );
+
+  return toServiceResult(envelope, (data) => mapBulkMutationResult(data));
 }
 
 export async function parseTask(
@@ -144,4 +293,91 @@ export async function createProject(
   );
 
   return requireMapped(toServiceResult(envelope, (data) => mapProject(data)));
+}
+
+export async function listProjectMembers(
+  workspaceId: string,
+  projectId: string,
+): Promise<ServiceResult<ProjectMemberSummary[]>> {
+  const envelope = await get<unknown>(
+    `/workspaces/${workspaceId}/projects/${projectId}/members`,
+  );
+
+  return toServiceResult(envelope, (data) => mapProjectMemberList(data));
+}
+
+export async function listEligibleAssignees(
+  workspaceId: string,
+  projectId: string,
+  search?: string,
+): Promise<ServiceResult<CandidateOption[]>> {
+  const envelope = await get<unknown>(
+    `/workspaces/${workspaceId}/projects/${projectId}/eligible-assignees${buildQueryString(
+      { search: search?.trim() || undefined },
+    )}`,
+  );
+
+  return toServiceResult(envelope, (data) => mapCandidates(data));
+}
+
+/**
+ * Updates project visibility and/or membership using the Phase 5 endpoints:
+ * PUT .../members and PATCH .../visibility.
+ */
+export async function updateProject(
+  workspaceId: string,
+  projectId: string,
+  input: UpdateProjectInput,
+): Promise<ServiceResult<ProjectRecord>> {
+  let latest: ProjectRecord | null = null;
+
+  if (input.visibility !== undefined) {
+    const visibilityEnvelope = await patch<unknown>(
+      `/workspaces/${workspaceId}/projects/${projectId}/visibility`,
+      { visibility: input.visibility },
+    );
+
+    if (!visibilityEnvelope.success) {
+      return {
+        ok: false,
+        code: visibilityEnvelope.error.code,
+        message: visibilityEnvelope.error.message,
+      };
+    }
+
+    latest = mapProject(visibilityEnvelope.data);
+    if (!latest) {
+      return MAPPING_ERROR;
+    }
+  }
+
+  if (input.memberIds !== undefined) {
+    const membersEnvelope = await put<unknown>(
+      `/workspaces/${workspaceId}/projects/${projectId}/members`,
+      { memberIds: input.memberIds },
+    );
+
+    if (!membersEnvelope.success) {
+      return {
+        ok: false,
+        code: membersEnvelope.error.code,
+        message: membersEnvelope.error.message,
+      };
+    }
+
+    latest = mapProject(membersEnvelope.data);
+    if (!latest) {
+      return MAPPING_ERROR;
+    }
+  }
+
+  if (!latest) {
+    return {
+      ok: false,
+      code: "VALIDATION_ERROR",
+      message: "No project changes were provided.",
+    };
+  }
+
+  return { ok: true, data: latest };
 }

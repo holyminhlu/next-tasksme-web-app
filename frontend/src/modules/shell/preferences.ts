@@ -15,9 +15,9 @@ export type ShellPreferences = {
   pinnedNavIds: string[];
   /** Route ids recently visited, most recent first. */
   recentNavIds: string[];
-  /** Ids of locally delivered shell notifications the user marked read. */
+  /** Legacy local read-ids (unused once backend notifications are available). */
   readNotificationIds: string[];
-  /** Local-only notification preference placeholders (no backend yet). */
+  /** Device-only UI prefs; workspace `taskAssigned` lives on the server. */
   notificationPrefs: {
     productUpdates: boolean;
     taskReminders: boolean;

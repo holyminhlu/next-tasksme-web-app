@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderKanban, Plus, UserPlus } from "lucide-react";
 import { Can, hasPermission, useAuth } from "@/modules/auth";
 import { Button } from "@/modules/design-system";
@@ -17,7 +17,7 @@ import {
   type DashboardFilterState,
   type DashboardFilters,
 } from "@/modules/dashboard";
-import { formatAbsoluteDateTime } from "@/modules/tasks";
+import { formatAbsoluteDateTime, subscribeTasksChanged } from "@/modules/tasks";
 import { PageHeader, useShell } from "@/modules/shell";
 import styles from "../app-pages.module.css";
 import dashboardStyles from "./dashboard.module.css";
@@ -85,6 +85,8 @@ export default function DashboardPage() {
   const refresh = useCallback(() => {
     setRefreshKey((key) => key + 1);
   }, []);
+
+  useEffect(() => subscribeTasksChanged(refresh), [refresh]);
 
   const greeting = greetingForHour(new Date().getHours());
   const firstName = user?.fullName?.split(" ")[0] ?? "there";

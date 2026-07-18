@@ -68,6 +68,10 @@ export const PERMISSIONS = [
     description: "Delete tasks",
   },
   {
+    key: "tasks:assign",
+    description: "Assign tasks to workspace members",
+  },
+  {
     key: "dashboard:read",
     description: "View workspace dashboard",
   },
@@ -106,6 +110,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "tasks:create",
     "tasks:update",
     "tasks:delete",
+    "tasks:assign",
     "dashboard:read",
     "activity:read",
     "projects:delete",
@@ -123,6 +128,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "tasks:create",
     "tasks:update",
     "tasks:delete",
+    "tasks:assign",
     "dashboard:read",
     "activity:read",
   ],
@@ -135,13 +141,10 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "tasks:create",
     "tasks:update",
     "tasks:delete",
+    "tasks:assign",
     "dashboard:read",
     "activity:read",
   ],
 };
 
-export const INVITABLE_ROLE_KEYS: SystemRoleKey[] = [
-  "admin",
-  "manager",
-  "member",
-];
+export const INVITABLE_ROLE_KEYS: SystemRoleKey[] = ["admin", "manager", "member"];
