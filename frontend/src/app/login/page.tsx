@@ -53,7 +53,6 @@ function LoginForm() {
   return (
     <AuthCard
       title="Sign in"
-      description="Access your TaskMng workspace with your email and password."
       footer={
         <>
           No account yet? <Link href="/register">Create one</Link>

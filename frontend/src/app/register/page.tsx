@@ -69,7 +69,6 @@ export default function RegisterPage() {
   return (
     <AuthCard
       title="Create account"
-      description="Sign up with your email. You will set up your workspace after verifying your email."
       footer={
         <>
           Already have an account? <Link href="/login">Sign in</Link>
