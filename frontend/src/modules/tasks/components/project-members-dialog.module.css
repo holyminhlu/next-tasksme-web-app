@@ -1,0 +1,78 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sectionLabel {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ds-color-text-muted);
+}
+
+.current {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avatarList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avatarItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-color-primary-soft);
+  color: var(--ds-color-primary);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.memberName {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ds-color-text);
+}
+
+.memberRole {
+  font-size: 0.8rem;
+  color: var(--ds-color-text-muted);
+}
+
+.checklist {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

@@ -11,20 +11,30 @@ import {
   TextInput,
   useToast,
 } from "@/modules/design-system";
+import { listMembers } from "@/modules/workspaces/members.service";
 import {
   TASK_PRIORITIES,
   TASK_PRIORITY_LABELS,
   formatAbsoluteDate,
+  filterEligibleAssignees,
+  pastDueWarning,
+  projectMembersToCandidates,
   toDateInputValue,
   toLocalDateString,
+  validateTaskDates,
+  dateInputToIso,
 } from "../tasks.helpers";
 import * as tasksService from "../tasks.service";
+import { emitTasksChanged } from "../tasks.events";
 import type {
   CandidateOption,
   ParseTaskResult,
+  ProjectRecord,
   TaskPriority,
   TaskRecord,
+  TaskStatus,
 } from "../tasks.types";
+import { AssigneePicker } from "./AssigneePicker";
 import styles from "./smart-capture.module.css";
 
 const EXAMPLES = [
@@ -39,7 +49,9 @@ type DraftFields = {
   title: string;
   description: string;
   priority: TaskPriority;
+  status: TaskStatus;
   dueDate: string; // YYYY-MM-DD ("" = none)
+  startAt: string;
   projectId: string;
   assigneeId: string;
 };
@@ -48,19 +60,12 @@ const EMPTY_DRAFT: DraftFields = {
   title: "",
   description: "",
   priority: "MEDIUM",
+  status: "TODO",
   dueDate: "",
+  startAt: "",
   projectId: "",
   assigneeId: "",
 };
-
-function dueDateToIso(value: string): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = new Date(`${value}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
-}
 
 /**
  * Smart Capture: natural-language task entry with an AI parse step, an
@@ -85,7 +90,14 @@ export function SmartCaptureForm({
   const [fields, setFields] = useState<DraftFields>(EMPTY_DRAFT);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [projects, setProjects] = useState<CandidateOption[]>([]);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [workspaceMembers, setWorkspaceMembers] = useState<CandidateOption[]>(
+    [],
+  );
+  const [eligibleByProject, setEligibleByProject] = useState<{
+    projectId: string;
+    options: CandidateOption[];
+  } | null>(null);
 
   const locale =
     typeof navigator !== "undefined" ? navigator.language : "en-US";
@@ -95,35 +107,104 @@ export function SmartCaptureForm({
   );
 
   const canPickProject = hasPermission(permissions, "projects:read");
+  const canListMembers = hasPermission(permissions, "members:read");
 
-  // Load workspace projects once for the project selects (best effort).
+  // Load workspace projects / ACTIVE members once for selects (best effort).
   useEffect(() => {
-    if (!workspaceId || !canPickProject) {
+    if (!workspaceId) {
       return;
     }
 
     let cancelled = false;
 
-    void tasksService.listProjects(workspaceId).then((result) => {
-      if (!cancelled && result.ok) {
-        setProjects(
-          result.data.map((project) => ({
-            id: project.id,
-            name: project.name,
-          })),
-        );
-      }
-    });
+    if (canPickProject) {
+      void tasksService.listProjects(workspaceId).then((result) => {
+        if (!cancelled && result.ok) {
+          setProjects(result.data);
+        }
+      });
+    }
+
+    if (canListMembers) {
+      void listMembers(workspaceId).then((result) => {
+        if (!cancelled && result.success) {
+          setWorkspaceMembers(
+            result.data
+              .filter((member) => member.status === "ACTIVE")
+              .map((member) => ({
+                id: member.user.id,
+                name: member.user.fullName,
+                role: member.role.key,
+                status: member.status,
+              })),
+          );
+        }
+      });
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, canPickProject]);
+  }, [workspaceId, canPickProject, canListMembers]);
+
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === fields.projectId) ?? null,
+    [projects, fields.projectId],
+  );
+
+  useEffect(() => {
+    if (!workspaceId || !selectedProject) {
+      return;
+    }
+
+    const projectId = selectedProject.id;
+    let cancelled = false;
+    void tasksService
+      .listEligibleAssignees(workspaceId, projectId)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (result.ok) {
+          setEligibleByProject({ projectId, options: result.data });
+          return;
+        }
+
+        if (selectedProject.visibility !== "PRIVATE") {
+          return;
+        }
+
+        setEligibleByProject({
+          projectId,
+          options: filterEligibleAssignees(workspaceMembers, {
+            projectVisibility: "PRIVATE",
+            projectMemberIds: selectedProject.memberIds,
+            projectMembers: projectMembersToCandidates(selectedProject.members),
+          }),
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, selectedProject, workspaceMembers]);
 
   const projectOptions = useMemo(() => {
+    const fromProjects: CandidateOption[] = projects.map((project) => ({
+      id: project.id,
+      name:
+        project.visibility === "PRIVATE"
+          ? `${project.name} (private)`
+          : project.name,
+      restricted: project.visibility === "PRIVATE",
+    }));
     const merged = new Map<string, CandidateOption>();
 
-    for (const option of [...(parseResult?.projectCandidates ?? []), ...projects]) {
+    for (const option of [
+      ...(parseResult?.projectCandidates ?? []),
+      ...fromProjects,
+    ]) {
       if (!merged.has(option.id)) {
         merged.set(option.id, option);
       }
@@ -132,11 +213,53 @@ export function SmartCaptureForm({
     return Array.from(merged.values());
   }, [parseResult?.projectCandidates, projects]);
 
-  const assigneeOptions = parseResult?.assigneeCandidates ?? [];
+  const assigneeOptions = useMemo(() => {
+    const scopedEligible =
+      selectedProject && eligibleByProject?.projectId === selectedProject.id
+        ? eligibleByProject.options
+        : null;
+    const eligible =
+      scopedEligible ??
+      filterEligibleAssignees(workspaceMembers, {
+        projectVisibility: selectedProject?.visibility,
+        projectMemberIds: selectedProject?.memberIds,
+      });
+    const merged = new Map<string, CandidateOption>();
+
+    for (const option of [
+      ...(parseResult?.assigneeCandidates ?? []),
+      ...eligible,
+    ]) {
+      if (!merged.has(option.id)) {
+        merged.set(option.id, option);
+      }
+    }
+
+    // When scoped by project (private or eligible-assignees), keep only allowed.
+    if (scopedEligible || selectedProject?.visibility === "PRIVATE") {
+      const allowed = new Set(eligible.map((member) => member.id));
+      return Array.from(merged.values()).filter((option) =>
+        allowed.has(option.id),
+      );
+    }
+
+    return Array.from(merged.values());
+  }, [
+    parseResult?.assigneeCandidates,
+    workspaceMembers,
+    selectedProject,
+    eligibleByProject,
+  ]);
 
   const updateField = useCallback(
     <K extends keyof DraftFields>(key: K, value: DraftFields[K]) => {
-      setFields((current) => ({ ...current, [key]: value }));
+      setFields((current) => {
+        const next = { ...current, [key]: value };
+        if (key === "projectId") {
+          next.assigneeId = "";
+        }
+        return next;
+      });
     },
     [],
   );
@@ -176,7 +299,9 @@ export function SmartCaptureForm({
       title: draft.title,
       description: draft.description ?? "",
       priority: draft.priority,
+      status: draft.status,
       dueDate: toDateInputValue(draft.dueDate),
+      startAt: toDateInputValue(draft.startAt),
       projectId: matchedProject ? result.data.projectCandidates[0].id : "",
       assigneeId: matchedAssignee ? result.data.assigneeCandidates[0].id : "",
     });
@@ -198,6 +323,14 @@ export function SmartCaptureForm({
       return;
     }
 
+    const startIso = fields.startAt ? dateInputToIso(fields.startAt) : null;
+    const dueIso = fields.dueDate ? dateInputToIso(fields.dueDate) : null;
+    const dateError = validateTaskDates(startIso, dueIso);
+    if (dateError) {
+      setCreateError(dateError);
+      return;
+    }
+
     setCreating(true);
     setCreateError(null);
 
@@ -205,7 +338,9 @@ export function SmartCaptureForm({
       title: fields.title.trim(),
       description: fields.description.trim() || undefined,
       priority: fields.priority,
-      dueDate: dueDateToIso(fields.dueDate),
+      status: fields.status,
+      startAt: startIso,
+      dueDate: dueIso,
       projectId: fields.projectId || undefined,
       assigneeId: fields.assigneeId || undefined,
       confirmedFromQuickCapture: mode === "review",
@@ -223,6 +358,7 @@ export function SmartCaptureForm({
       description: `"${result.data.title}" was added to this workspace.`,
       tone: "success",
     });
+    emitTasksChanged();
     onCreated?.(result.data);
     onClose();
   }
@@ -230,6 +366,9 @@ export function SmartCaptureForm({
   const dueAbsolute = fields.dueDate
     ? formatAbsoluteDate(`${fields.dueDate}T00:00:00`, locale)
     : null;
+  const dueWarning = pastDueWarning(
+    fields.dueDate ? dateInputToIso(fields.dueDate) : null,
+  );
 
   // ------------------------------------------------------------------ capture
   if (mode === "capture") {
@@ -419,6 +558,17 @@ export function SmartCaptureForm({
           )}
         </FormField>
 
+        <FormField label="Start date" hint="Optional">
+          {(props) => (
+            <TextInput
+              {...props}
+              type="date"
+              value={fields.startAt}
+              onChange={(event) => updateField("startAt", event.target.value)}
+            />
+          )}
+        </FormField>
+
         {canPickProject && (projectOptions.length > 0 || isReview) && (
           <FormField
             label="Project"
@@ -447,34 +597,20 @@ export function SmartCaptureForm({
           </FormField>
         )}
 
-        {isReview && assigneeOptions.length > 0 && (
-          <FormField
-            label="Assignee"
-            hint={
-              parseResult?.draft.assigneeName && !fields.assigneeId
-                ? `Mentioned: "${parseResult.draft.assigneeName}"`
-                : undefined
-            }
-          >
-            {(props) => (
-              <Select
-                {...props}
-                value={fields.assigneeId}
-                onChange={(event) =>
-                  updateField("assigneeId", event.target.value)
-                }
-              >
-                <option value="">Unassigned</option>
-                {assigneeOptions.map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>
-                    {candidate.name}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </FormField>
+        {(isReview || canListMembers) && assigneeOptions.length > 0 && (
+          <AssigneePicker
+            value={fields.assigneeId}
+            onChange={(assigneeId) => updateField("assigneeId", assigneeId)}
+            options={assigneeOptions}
+          />
         )}
       </div>
+
+      {dueWarning && (
+        <p className={styles.errorBanner} role="status">
+          {dueWarning}
+        </p>
+      )}
 
       {createError && (
         <p className={styles.errorBanner} role="alert">

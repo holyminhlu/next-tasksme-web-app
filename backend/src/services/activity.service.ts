@@ -17,8 +17,13 @@ type RecordActivityInput = {
 export const ACTIVITY_ACTIONS = {
   TASK_CREATED: "task.created",
   TASK_UPDATED: "task.updated",
+  TASK_STATUS_CHANGED: "task.status_changed",
+  TASK_ASSIGNED: "task.assigned",
   TASK_COMPLETED: "task.completed",
+  TASK_ARCHIVED: "task.archived",
+  TASK_UNARCHIVED: "task.unarchived",
   TASK_DELETED: "task.deleted",
+  TASK_RESTORED: "task.restored",
   PROJECT_CREATED: "project.created",
 } as const;
 

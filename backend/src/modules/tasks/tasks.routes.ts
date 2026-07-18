@@ -4,19 +4,34 @@ import { requirePermission } from "../../middleware/requirePermission.js";
 import { tenantContext } from "../../middleware/tenantContext.js";
 import { validateRequest } from "../../middleware/validate.js";
 import {
+  archiveTask,
+  bulkDelete,
+  bulkUpdate,
+  changeAssignee,
+  changeStatus,
   createTask,
   deleteTask,
+  getTaskActivity,
   getTask,
   listTasks,
   parseTask,
+  restoreTask,
+  unarchiveTask,
   updateTask,
 } from "./tasks.controller.js";
 import {
+  assigneeMutationSchema,
+  bulkDeleteSchema,
+  bulkUpdateSchema,
   createTaskSchema,
+  deleteTaskQuerySchema,
   listTasksQuerySchema,
   parseTaskSchema,
+  statusMutationSchema,
+  taskActivityQuerySchema,
   taskIdParamsSchema,
   updateTaskSchema,
+  versionMutationSchema,
   workspaceIdParamsSchema,
 } from "./tasks.schemas.js";
 
@@ -57,6 +72,22 @@ tasksRouter.post(
   createTask,
 );
 
+tasksRouter.post(
+  "/bulk-update",
+  validateRequest({ params: workspaceIdParamsSchema, body: bulkUpdateSchema }),
+  tenantContext,
+  requirePermission("tasks:update"),
+  bulkUpdate,
+);
+
+tasksRouter.post(
+  "/bulk-delete",
+  validateRequest({ params: workspaceIdParamsSchema, body: bulkDeleteSchema }),
+  tenantContext,
+  requirePermission("tasks:delete"),
+  bulkDelete,
+);
+
 tasksRouter.get(
   "/:taskId",
   validateRequest({
@@ -78,10 +109,52 @@ tasksRouter.patch(
   updateTask,
 );
 
+tasksRouter.patch(
+  "/:taskId/status",
+  validateRequest({ params: taskIdParamsSchema, body: statusMutationSchema }),
+  tenantContext,
+  requirePermission("tasks:update"),
+  changeStatus,
+);
+
+tasksRouter.patch(
+  "/:taskId/assignee",
+  validateRequest({ params: taskIdParamsSchema, body: assigneeMutationSchema }),
+  tenantContext,
+  requirePermission("tasks:assign"),
+  changeAssignee,
+);
+
+for (const [path, handler] of [
+  ["archive", archiveTask],
+  ["unarchive", unarchiveTask],
+  ["restore", restoreTask],
+] as const) {
+  tasksRouter.post(
+    `/:taskId/${path}`,
+    validateRequest({ params: taskIdParamsSchema, body: versionMutationSchema }),
+    tenantContext,
+    requirePermission("tasks:update"),
+    handler,
+  );
+}
+
+tasksRouter.get(
+  "/:taskId/activity",
+  validateRequest({
+    params: taskIdParamsSchema,
+    query: taskActivityQuerySchema,
+  }),
+  tenantContext,
+  requirePermission("activity:read"),
+  getTaskActivity,
+);
+
 tasksRouter.delete(
   "/:taskId",
   validateRequest({
     params: taskIdParamsSchema,
+    query: deleteTaskQuerySchema,
   }),
   tenantContext,
   requirePermission("tasks:delete"),

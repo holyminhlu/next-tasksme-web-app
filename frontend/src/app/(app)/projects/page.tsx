@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback } from "react";
-import { FolderKanban, Plus } from "lucide-react";
+import { useCallback, useState } from "react";
+import { FolderKanban, Plus, Users } from "lucide-react";
 import { hasPermission, useAuth } from "@/modules/auth";
 import {
   Badge,
@@ -13,13 +13,18 @@ import {
   LoadingState,
 } from "@/modules/design-system";
 import { useWidget } from "@/modules/dashboard";
-import { tasksService } from "@/modules/tasks";
+import {
+  ProjectMembersDialog,
+  canManagePrivateProjectMembers,
+  tasksService,
+  type ProjectRecord,
+} from "@/modules/tasks";
 import { PageHeader, useShell } from "@/modules/shell";
 import styles from "../app-pages.module.css";
 import pageStyles from "./projects.module.css";
 
 export default function ProjectsPage() {
-  const { selectedWorkspace, permissions } = useAuth();
+  const { profile, selectedWorkspace, permissions } = useAuth();
   const { setQuickCreate, navContext } = useShell();
 
   const workspaceId = selectedWorkspace?.id ?? null;
@@ -31,6 +36,8 @@ export default function ProjectsPage() {
     [workspaceId],
   );
   const state = useWidget(workspaceId && canRead ? fetcher : null);
+  const [managing, setManaging] = useState<ProjectRecord | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, ProjectRecord>>({});
 
   if (!canRead) {
     return (
@@ -45,7 +52,9 @@ export default function ProjectsPage() {
   const projectsModuleDisabled =
     modulesKnown && !navContext.enabledModuleKeys!.includes("projects");
 
-  const projects = state.data ?? [];
+  const projects = (state.data ?? []).map(
+    (project) => overrides[project.id] ?? project,
+  );
 
   return (
     <div className={styles.stack}>
@@ -106,14 +115,23 @@ export default function ProjectsPage() {
           <div className={pageStyles.grid}>
             {projects.map((project) => {
               const isActive = project.status.toUpperCase() === "ACTIVE";
+              const isPrivate = project.visibility === "PRIVATE";
+              const canManage = canManagePrivateProjectMembers({
+                roleKey: selectedWorkspace?.roleKey,
+                project,
+                userId: profile?.id,
+              });
 
               return (
                 <article key={project.id} className={pageStyles.projectCard}>
                   <div className={pageStyles.projectHeader}>
                     <h2 className={pageStyles.projectName}>{project.name}</h2>
-                    <Badge tone={isActive ? "success" : "neutral"}>
-                      {isActive ? "Active" : project.status}
-                    </Badge>
+                    <div className={pageStyles.badgeRow}>
+                      <Badge tone={isActive ? "success" : "neutral"}>
+                        {isActive ? "Active" : project.status}
+                      </Badge>
+                      {isPrivate && <Badge tone="warning">Private</Badge>}
+                    </div>
                   </div>
                   {project.description && (
                     <p className={pageStyles.projectDescription}>
@@ -121,6 +139,13 @@ export default function ProjectsPage() {
                     </p>
                   )}
                   <div className={pageStyles.projectMeta}>
+                    {isPrivate && (
+                      <span>
+                        {project.memberIds.length > 0
+                          ? `${project.memberIds.length} member${project.memberIds.length === 1 ? "" : "s"}`
+                          : "Private"}
+                      </span>
+                    )}
                     {project.openTasks !== null && (
                       <span>{project.openTasks} open</span>
                     )}
@@ -128,22 +153,42 @@ export default function ProjectsPage() {
                       <span>{project.totalTasks} total tasks</span>
                     )}
                   </div>
-                  {canReadTasks && (
-                    <div className={pageStyles.projectFooter}>
+                  <div className={pageStyles.projectFooter}>
+                    {canReadTasks && (
                       <Link
                         className={pageStyles.projectLink}
                         href={`/my-tasks?projectId=${encodeURIComponent(project.id)}`}
                       >
                         View tasks
                       </Link>
-                    </div>
-                  )}
+                    )}
+                    {canManage && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        iconLeft={<Users size={14} aria-hidden />}
+                        onClick={() => setManaging(project)}
+                      >
+                        Manage members
+                      </Button>
+                    )}
+                  </div>
                 </article>
               );
             })}
           </div>
         </>
       )}
+
+      <ProjectMembersDialog
+        project={managing}
+        open={Boolean(managing)}
+        onClose={() => setManaging(null)}
+        onUpdated={(updated) => {
+          setOverrides((current) => ({ ...current, [updated.id]: updated }));
+          state.reload();
+        }}
+      />
     </div>
   );
 }

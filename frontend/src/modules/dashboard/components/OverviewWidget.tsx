@@ -21,6 +21,8 @@ import styles from "./widgets.module.css";
 const STATUS_COLORS: Record<TaskStatus, string> = {
   TODO: "var(--ds-color-text-subtle)",
   IN_PROGRESS: "var(--ds-color-primary)",
+  IN_REVIEW: "var(--ds-color-primary)",
+  BLOCKED: "var(--ds-color-danger)",
   DONE: "var(--ds-color-success)",
   CANCELLED: "var(--ds-color-warning)",
 };

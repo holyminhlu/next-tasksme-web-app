@@ -152,6 +152,7 @@ export type PermissionKey =
   | "tasks:read"
   | "tasks:create"
   | "tasks:update"
+  | "tasks:assign"
   | "tasks:delete"
   | "projects:delete"
   | "dashboard:read"

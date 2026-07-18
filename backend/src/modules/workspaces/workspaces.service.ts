@@ -74,11 +74,7 @@ function defaultWorkspaceName(
 }
 
 export class WorkspacesService {
-  async createWorkspace(
-    userId: string,
-    input: CreateWorkspaceInput,
-    req: Request,
-  ) {
+  async createWorkspace(userId: string, input: CreateWorkspaceInput, req: Request) {
     const user = await prisma.user.findFirst({
       where: { id: userId, deletedAt: null, status: "ACTIVE" },
     });
@@ -102,14 +98,15 @@ export class WorkspacesService {
           type: input.type,
           ownerId: userId,
           usagePurpose: input.usagePurpose,
-          industryCode:
-            input.type === "ORGANIZATION" ? input.industryCode : undefined,
-          companySize:
-            input.type === "ORGANIZATION" ? input.companySize : undefined,
+          industryCode: input.type === "ORGANIZATION" ? input.industryCode : undefined,
+          companySize: input.type === "ORGANIZATION" ? input.companySize : undefined,
           timezone: input.timezone ?? "UTC",
           locale: input.locale ?? "vi",
           logoUrl: input.logoUrl,
         },
+      });
+      await tx.workspaceTaskCounter.create({
+        data: { workspaceId: workspace.id, nextNumber: 1 },
       });
 
       const roles = await createWorkspaceRoles(workspace.id, tx);
@@ -222,10 +219,7 @@ export class WorkspacesService {
           }
         }
 
-        if (
-          workspace.type === "PERSONAL" &&
-          input.type === "ORGANIZATION"
-        ) {
+        if (workspace.type === "PERSONAL" && input.type === "ORGANIZATION") {
           const memberCount = await tx.workspaceMember.count({
             where: {
               workspaceId,
@@ -336,11 +330,7 @@ export class WorkspacesService {
         role: member.role,
         createdAt: member.createdAt,
       })),
-      pagination: buildPaginationMeta(
-        pagination.page,
-        pagination.pageSize,
-        total,
-      ),
+      pagination: buildPaginationMeta(pagination.page, pagination.pageSize, total),
     };
   }
 
@@ -526,9 +516,7 @@ export class WorkspacesService {
 
       if (!user) {
         if (!input.fullName || !passwordHash) {
-          throw new ValidationError(
-            "fullName and password are required for new users",
-          );
+          throw new ValidationError("fullName and password are required for new users");
         }
 
         user = await tx.user.create({
@@ -584,9 +572,7 @@ export class WorkspacesService {
       });
 
       const onboardingType =
-        invitation.role.key === "manager"
-          ? "INVITED_MANAGER"
-          : "INVITED_MEMBER";
+        invitation.role.key === "manager" ? "INVITED_MANAGER" : "INVITED_MEMBER";
 
       await tx.workspaceOnboarding.upsert({
         where: {
@@ -970,11 +956,7 @@ export class WorkspacesService {
     };
   }
 
-  async completeOnboarding(
-    workspaceId: string,
-    userId: string,
-    req: Request,
-  ) {
+  async completeOnboarding(workspaceId: string, userId: string, req: Request) {
     const existing = await this.getOnboarding(workspaceId, userId);
     if (existing.status === "COMPLETED") {
       return existing;
@@ -1018,15 +1000,12 @@ export class WorkspacesService {
       orderBy: { moduleKey: "asc" },
     });
 
-    const catalogByKey = new Map(
-      MODULE_CATALOG.map((item) => [item.key, item]),
-    );
+    const catalogByKey = new Map(MODULE_CATALOG.map((item) => [item.key, item]));
 
     return modules.map((module) => ({
       ...module,
       name: catalogByKey.get(module.moduleKey as never)?.name ?? module.moduleKey,
-      description:
-        catalogByKey.get(module.moduleKey as never)?.description ?? null,
+      description: catalogByKey.get(module.moduleKey as never)?.description ?? null,
     }));
   }
 
@@ -1045,12 +1024,8 @@ export class WorkspacesService {
       });
 
       for (const module of existing) {
-        const catalog = MODULE_CATALOG.find(
-          (item) => item.key === module.moduleKey,
-        );
-        const nextEnabled = catalog?.core
-          ? true
-          : enabled.has(module.moduleKey as never);
+        const catalog = MODULE_CATALOG.find((item) => item.key === module.moduleKey);
+        const nextEnabled = catalog?.core ? true : enabled.has(module.moduleKey as never);
 
         await tx.workspaceModule.update({
           where: { id: module.id },
@@ -1059,17 +1034,14 @@ export class WorkspacesService {
       }
 
       for (const catalogModule of MODULE_CATALOG) {
-        const found = existing.find(
-          (item) => item.moduleKey === catalogModule.key,
-        );
+        const found = existing.find((item) => item.moduleKey === catalogModule.key);
         if (!found) {
           await tx.workspaceModule.create({
             data: {
               workspaceId,
               moduleKey: catalogModule.key,
               core: catalogModule.core,
-              enabled:
-                catalogModule.core || enabled.has(catalogModule.key),
+              enabled: catalogModule.core || enabled.has(catalogModule.key),
             },
           });
         }
@@ -1156,16 +1128,19 @@ export class WorkspacesService {
 
       const tasks = [];
       for (const taskInput of input.tasks ?? []) {
+        const counter = await tx.workspaceTaskCounter.update({
+          where: { workspaceId },
+          data: { nextNumber: { increment: 1 } },
+        });
         const task = await tx.task.create({
           data: {
             workspaceId,
+            taskNumber: counter.nextNumber - 1,
             projectId: project.id,
             title: taskInput.title,
             description: taskInput.description,
             priority: taskInput.priority ?? "MEDIUM",
-            dueDate: taskInput.dueDate
-              ? new Date(taskInput.dueDate)
-              : undefined,
+            dueDate: taskInput.dueDate ? new Date(taskInput.dueDate) : undefined,
             createdById: userId,
             assigneeId: userId,
             status: "TODO",
@@ -1186,10 +1161,7 @@ export class WorkspacesService {
 
       if (onboarding && onboarding.status !== "COMPLETED") {
         const completedSteps = [
-          ...new Set([
-            ...asCompletedSteps(onboarding.completedSteps),
-            "first_project",
-          ]),
+          ...new Set([...asCompletedSteps(onboarding.completedSteps), "first_project"]),
         ];
         await tx.workspaceOnboarding.update({
           where: { id: onboarding.id },

@@ -1,25 +1,33 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CheckCheck, Info } from "lucide-react";
+import { CheckCheck } from "lucide-react";
 import {
   Badge,
   Button,
   Drawer,
   EmptyState,
+  ErrorState,
+  LoadingState,
 } from "@/modules/design-system";
+import type { WorkspaceNotification } from "@/modules/notifications";
 import { useShell } from "../ShellProvider";
-import type { ShellNotification } from "../notifications";
 import styles from "./NotificationCenter.module.css";
+
+function typeLabel(type: string): string {
+  if (type === "TASK_ASSIGNED") {
+    return "Assignment";
+  }
+
+  return "Notice";
+}
 
 export function NotificationList({
   notifications,
-  unreadIds,
   onMarkRead,
   onNavigate,
 }: {
-  notifications: ShellNotification[];
-  unreadIds: string[];
+  notifications: WorkspaceNotification[];
   onMarkRead: (id: string) => void;
   onNavigate?: (href: string) => void;
 }) {
@@ -27,7 +35,7 @@ export function NotificationList({
     return (
       <EmptyState
         title="No notifications"
-        description="You're all caught up. Workspace activity will appear here."
+        description="You're all caught up. Assignment alerts for this workspace appear here."
       />
     );
   }
@@ -35,7 +43,7 @@ export function NotificationList({
   return (
     <ul className={styles.list}>
       {notifications.map((notification) => {
-        const unread = unreadIds.includes(notification.id);
+        const unread = !notification.readAt;
 
         return (
           <li
@@ -48,11 +56,13 @@ export function NotificationList({
                 {notification.title}
                 {unread && <span className={styles.srOnly}>(unread)</span>}
               </span>
-              <Badge tone={notification.kind === "system" ? "primary" : "neutral"}>
-                {notification.kind === "system" ? "System" : "Tip"}
+              <Badge tone={unread ? "primary" : "neutral"}>
+                {typeLabel(notification.type)}
               </Badge>
             </div>
-            <p className={styles.itemBody}>{notification.body}</p>
+            {notification.body && (
+              <p className={styles.itemBody}>{notification.body}</p>
+            )}
             <div className={styles.itemActions}>
               {unread && (
                 <Button
@@ -84,11 +94,14 @@ export function NotificationCenter() {
   const router = useRouter();
   const {
     notifications,
-    unreadNotificationIds,
+    notificationsLoading,
+    notificationsError,
+    unreadNotificationCount,
     notificationsOpen,
     setNotificationsOpen,
     markNotificationRead,
     markAllNotificationsRead,
+    refreshNotifications,
   } = useShell();
 
   return (
@@ -97,37 +110,36 @@ export function NotificationCenter() {
       onClose={() => setNotificationsOpen(false)}
       title="Notifications"
       headerActions={
-        unreadNotificationIds.length > 0 ? (
+        unreadNotificationCount > 0 ? (
           <Button
             size="sm"
             variant="ghost"
             iconLeft={<CheckCheck size={14} aria-hidden />}
-            onClick={markAllNotificationsRead}
+            onClick={() => void markAllNotificationsRead()}
           >
             Mark all read
           </Button>
         ) : undefined
       }
-      footer={
-        <p className={styles.localNote}>
-          <Info size={14} aria-hidden className={styles.localNoteIcon} />
-          <span>
-            These notifications are generated locally on this device. Real-time
-            workspace notifications arrive with the backend feed in a later
-            phase.
-          </span>
-        </p>
-      }
     >
-      <NotificationList
-        notifications={notifications}
-        unreadIds={unreadNotificationIds}
-        onMarkRead={markNotificationRead}
-        onNavigate={(href) => {
-          setNotificationsOpen(false);
-          router.push(href);
-        }}
-      />
+      {notificationsLoading ? (
+        <LoadingState label="Loading notifications..." />
+      ) : notificationsError ? (
+        <ErrorState
+          title="Couldn't load notifications"
+          description={notificationsError}
+          onRetry={() => void refreshNotifications()}
+        />
+      ) : (
+        <NotificationList
+          notifications={notifications}
+          onMarkRead={(id) => void markNotificationRead(id)}
+          onNavigate={(href) => {
+            setNotificationsOpen(false);
+            router.push(href);
+          }}
+        />
+      )}
     </Drawer>
   );
 }

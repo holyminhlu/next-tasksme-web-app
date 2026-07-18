@@ -25,6 +25,8 @@ const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   "tasks:read": "Xem công việc",
   "tasks:create": "Tạo công việc",
   "tasks:update": "Cập nhật công việc",
+  "tasks:assign": "Gán công việc",
+  "tasks:delete": "Xóa công việc",
 };
 
 export function RoleIntroStep() {

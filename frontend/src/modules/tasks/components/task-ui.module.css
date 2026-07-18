@@ -147,3 +147,80 @@
   line-height: 1.5;
   margin: 0;
 }
+
+.warningText {
+  padding: 8px 12px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-warning-soft, #fff7ed);
+  color: var(--ds-color-warning-soft-text, #9a3412);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.conflictBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-warning-soft, #fff7ed);
+  color: var(--ds-color-warning-soft-text, #9a3412);
+  font-size: 0.85rem;
+}
+
+.conflictBanner p {
+  margin: 0;
+}
+
+.mutedText {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ds-color-text-muted);
+}
+
+.drawerFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activitySection {
+  border-top: 1px solid var(--ds-color-border);
+  padding-top: 14px;
+}
+
+.activityTitle {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.activityList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.activityItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activitySummary {
+  font-size: 0.85rem;
+  color: var(--ds-color-text);
+}
+
+.activityMeta {
+  font-size: 0.75rem;
+  color: var(--ds-color-text-muted);
+}

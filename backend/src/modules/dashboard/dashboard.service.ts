@@ -5,14 +5,11 @@ import {
   assertMemberFilterAllowed,
   buildTaskVisibilityWhere,
   hasWorkspaceTaskScope,
+  OPEN_TASK_STATUSES,
 } from "../../lib/task-scope.js";
 import { formatYmd, resolveDashboardRange } from "../../lib/timezone.js";
 import { buildActivityVisibilityWhere } from "../../services/activity.service.js";
-import type {
-  ActivityQuery,
-  DashboardQuery,
-  MyWorkQuery,
-} from "./dashboard.schemas.js";
+import type { ActivityQuery, DashboardQuery, MyWorkQuery } from "./dashboard.schemas.js";
 
 type Actor = {
   userId: string;
@@ -170,7 +167,7 @@ export class DashboardService {
 
     const openWhere: Prisma.TaskWhereInput = {
       ...where,
-      status: { in: ["TODO", "IN_PROGRESS"] },
+      status: { in: [...OPEN_TASK_STATUSES] },
     };
     const dueTodayWhere: Prisma.TaskWhereInput = {
       ...openWhere,
@@ -208,11 +205,21 @@ export class DashboardService {
       prisma.task.count({ where: overdueWhere }),
       prisma.task.count({ where: completedWhere }),
       prisma.project.count({
-        where: { workspaceId, deletedAt: null, status: "ACTIVE" },
+        where: {
+          workspaceId,
+          deletedAt: null,
+          status: "ACTIVE",
+          ...(actor.roleKey === "owner" || actor.roleKey === "admin"
+            ? {}
+            : {
+                OR: [
+                  { visibility: "WORKSPACE" as const },
+                  { members: { some: { userId: actor.userId } } },
+                ],
+              }),
+        },
       }),
-      workspaceScope
-        ? prisma.task.count({ where: blockedWhere })
-        : Promise.resolve(null),
+      workspaceScope ? prisma.task.count({ where: blockedWhere }) : Promise.resolve(null),
       workspaceScope
         ? prisma.task.count({ where: unassignedWhere })
         : Promise.resolve(null),
@@ -251,6 +258,7 @@ export class DashboardService {
     const baseWhere: Prisma.TaskWhereInput = {
       workspaceId,
       deletedAt: null,
+      archivedAt: null,
       assigneeId: actor.userId,
       ...(query.projectId ? { projectId: query.projectId } : {}),
     };
@@ -264,19 +272,19 @@ export class DashboardService {
     if (query.tab === "today") {
       where = {
         ...baseWhere,
-        status: { in: ["TODO", "IN_PROGRESS"] },
+        status: { in: [...OPEN_TASK_STATUSES] },
         dueDate: { gte: range.todayStart, lte: range.todayEnd },
       };
     } else if (query.tab === "upcoming") {
       where = {
         ...baseWhere,
-        status: { in: ["TODO", "IN_PROGRESS"] },
+        status: { in: [...OPEN_TASK_STATUSES] },
         dueDate: { gt: range.todayEnd },
       };
     } else if (query.tab === "overdue") {
       where = {
         ...baseWhere,
-        status: { in: ["TODO", "IN_PROGRESS"] },
+        status: { in: [...OPEN_TASK_STATUSES] },
         dueDate: { lt: range.todayStart, not: null },
       };
     } else if (query.tab === "in-progress") {
@@ -285,11 +293,7 @@ export class DashboardService {
         status: "IN_PROGRESS",
       };
     } else if (query.tab === "completed") {
-      where = buildCompletedInRangeWhere(
-        baseWhere,
-        range.fromInstant,
-        range.toInstant,
-      );
+      where = buildCompletedInRangeWhere(baseWhere, range.fromInstant, range.toInstant);
       orderBy = [{ completedAt: "desc" }, { updatedAt: "desc" }];
     }
 
@@ -334,7 +338,7 @@ export class DashboardService {
       by: ["projectId"],
       where: {
         ...where,
-        status: { in: ["TODO", "IN_PROGRESS"] },
+        status: { in: [...OPEN_TASK_STATUSES] },
         dueDate: { lt: range.todayStart, not: null },
       },
       _count: { _all: true },
@@ -352,11 +356,7 @@ export class DashboardService {
     const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
 
     const completedTasks = await prisma.task.findMany({
-      where: buildCompletedInRangeWhere(
-        where,
-        range.fromInstant,
-        range.toInstant,
-      ),
+      where: buildCompletedInRangeWhere(where, range.fromInstant, range.toInstant),
       select: { completedAt: true, updatedAt: true },
     });
 
@@ -370,7 +370,7 @@ export class DashboardService {
     const openTasks = await prisma.task.findMany({
       where: {
         ...where,
-        status: { in: ["TODO", "IN_PROGRESS"] },
+        status: { in: [...OPEN_TASK_STATUSES] },
       },
       select: {
         assigneeId: true,
@@ -378,10 +378,7 @@ export class DashboardService {
       },
     });
 
-    const workload = new Map<
-      string,
-      { openTasks: number; overdueTasks: number }
-    >();
+    const workload = new Map<string, { openTasks: number; overdueTasks: number }>();
     for (const task of openTasks) {
       if (!task.assigneeId) {
         continue;
@@ -430,17 +427,35 @@ export class DashboardService {
     };
   }
 
-  async getActivity(
-    workspaceId: string,
-    actor: Actor,
-    query: ActivityQuery,
-  ) {
+  async getActivity(workspaceId: string, actor: Actor, query: ActivityQuery) {
     const where = buildActivityVisibilityWhere(
       workspaceId,
       actor.userId,
       actor.roleKey,
       query.projectId,
     );
+    if (actor.roleKey !== "owner" && actor.roleKey !== "admin") {
+      const visibleProjects = await prisma.project.findMany({
+        where: {
+          workspaceId,
+          deletedAt: null,
+          OR: [
+            { visibility: "WORKSPACE" },
+            { members: { some: { userId: actor.userId } } },
+          ],
+        },
+        select: { id: true },
+      });
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        {
+          OR: [
+            { projectId: null },
+            { projectId: { in: visibleProjects.map((project) => project.id) } },
+          ],
+        },
+      ];
+    }
 
     const page = query.page ?? 1;
     const pageSize = query.limit ?? query.pageSize ?? 20;

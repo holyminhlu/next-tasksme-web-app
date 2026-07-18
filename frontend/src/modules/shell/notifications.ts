@@ -1,13 +1,10 @@
 /**
- * Local shell notifications.
- *
- * There is no backend notifications API yet, so the shell delivers a small
- * set of locally generated system notices per workspace. Read state persists
- * in shell preferences (localStorage). The UI labels these as local so users
- * are never misled about backend delivery.
+ * Legacy shell notification helpers retained for tests that still import
+ * unread filtering. Seeded/local notification content has been removed —
+ * the shell loads workspace notifications from the backend API.
  */
 
-export type ShellNotificationKind = "system" | "tip";
+export type ShellNotificationKind = "system" | "tip" | "task";
 
 export type ShellNotification = {
   id: string;
@@ -16,39 +13,27 @@ export type ShellNotification = {
   body: string;
   /** Optional route the notification links to. */
   href?: string;
+  readAt?: string | null;
+  createdAt?: string | null;
 };
 
+/** @deprecated Seeded local notifications are no longer used. */
 export function seededNotifications(
   workspaceName: string | null,
 ): ShellNotification[] {
-  return [
-    {
-      id: "system-welcome",
-      kind: "system",
-      title: workspaceName
-        ? `Welcome to ${workspaceName}`
-        : "Welcome to Task SME",
-      body: "Your workspace shell is ready. Use the sidebar to move between areas, or press Ctrl/Cmd+K to jump anywhere.",
-      href: "/dashboard",
-    },
-    {
-      id: "tip-command-palette",
-      kind: "tip",
-      title: "Try the command palette",
-      body: "Press Ctrl+K (Cmd+K on Mac) to search pages and run quick actions from anywhere.",
-    },
-    {
-      id: "tip-pin-navigation",
-      kind: "tip",
-      title: "Pin your favorite pages",
-      body: "Hover a sidebar item and use the pin icon to keep it at the top of your navigation.",
-    },
-  ];
+  void workspaceName;
+  return [];
 }
 
 export function unreadNotifications(
   notifications: ShellNotification[],
-  readIds: string[],
+  readIds: string[] = [],
 ): ShellNotification[] {
-  return notifications.filter((notification) => !readIds.includes(notification.id));
+  return notifications.filter((notification) => {
+    if (notification.readAt) {
+      return false;
+    }
+
+    return !readIds.includes(notification.id);
+  });
 }

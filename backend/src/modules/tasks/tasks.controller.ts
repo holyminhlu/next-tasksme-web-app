@@ -2,10 +2,16 @@ import type { NextFunction, Request, Response } from "express";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { sendSuccess } from "../../lib/response.js";
 import type {
+  AssigneeMutationInput,
+  BulkDeleteInput,
+  BulkUpdateInput,
   CreateTaskInput,
   ListTasksQuery,
   ParseTaskInput,
+  StatusMutationInput,
+  TaskActivityQuery,
   UpdateTaskInput,
+  VersionMutationInput,
 } from "./tasks.schemas.js";
 import { tasksService } from "./tasks.service.js";
 
@@ -113,8 +119,107 @@ export async function deleteTask(
       getParam(req, "workspaceId"),
       getParam(req, "taskId"),
       actor,
+      Number(req.query.version),
     );
     sendSuccess(res, result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function changeStatus(req: Request, res: Response, next: NextFunction) {
+  try {
+    sendSuccess(
+      res,
+      await tasksService.changeStatus(
+        getParam(req, "workspaceId"),
+        getParam(req, "taskId"),
+        requireActor(req),
+        req.body as StatusMutationInput,
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function changeAssignee(req: Request, res: Response, next: NextFunction) {
+  try {
+    sendSuccess(
+      res,
+      await tasksService.changeAssignee(
+        getParam(req, "workspaceId"),
+        getParam(req, "taskId"),
+        requireActor(req),
+        req.body as AssigneeMutationInput,
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+function lifecycleHandler(method: "archiveTask" | "unarchiveTask" | "restoreTask") {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await tasksService[method](
+          getParam(req, "workspaceId"),
+          getParam(req, "taskId"),
+          requireActor(req),
+          req.body as VersionMutationInput,
+        ),
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+export const archiveTask = lifecycleHandler("archiveTask");
+export const unarchiveTask = lifecycleHandler("unarchiveTask");
+export const restoreTask = lifecycleHandler("restoreTask");
+
+export async function getTaskActivity(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await tasksService.getTaskActivity(
+      getParam(req, "workspaceId"),
+      getParam(req, "taskId"),
+      requireActor(req),
+      req.query as unknown as TaskActivityQuery,
+    );
+    sendSuccess(res, result.items, { meta: { pagination: result.pagination } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkUpdate(req: Request, res: Response, next: NextFunction) {
+  try {
+    sendSuccess(
+      res,
+      await tasksService.bulkUpdate(
+        getParam(req, "workspaceId"),
+        requireActor(req),
+        req.body as BulkUpdateInput,
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function bulkDelete(req: Request, res: Response, next: NextFunction) {
+  try {
+    sendSuccess(
+      res,
+      await tasksService.bulkDelete(
+        getParam(req, "workspaceId"),
+        requireActor(req),
+        req.body as BulkDeleteInput,
+      ),
+    );
   } catch (error) {
     next(error);
   }

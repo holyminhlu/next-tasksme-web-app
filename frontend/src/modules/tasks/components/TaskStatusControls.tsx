@@ -7,8 +7,10 @@ import { DropdownMenu, MenuItem, useToast } from "@/modules/design-system";
 import {
   TASK_STATUSES,
   TASK_STATUS_LABELS,
+  isConflictError,
 } from "../tasks.helpers";
 import * as tasksService from "../tasks.service";
+import { emitTasksChanged } from "../tasks.events";
 import type { TaskRecord, TaskStatus } from "../tasks.types";
 import styles from "./task-ui.module.css";
 
@@ -37,23 +39,28 @@ export function TaskQuickComplete({
 
     setBusy(true);
     const nextStatus: TaskStatus = done ? "TODO" : "DONE";
-    const result = await tasksService.updateTask(
+    const result = await tasksService.updateTaskStatus(
       selectedWorkspace.id,
       task.id,
-      { status: nextStatus },
+      { status: nextStatus, version: task.version },
     );
     setBusy(false);
 
     if (!result.ok) {
       toast({
-        title: "Couldn't update task",
-        description: result.message,
+        title: isConflictError(result.code)
+          ? "Task was updated elsewhere"
+          : "Couldn't update task",
+        description: isConflictError(result.code)
+          ? "Reload the list and try again."
+          : result.message,
         tone: "error",
       });
       return;
     }
 
     onUpdated(result.data);
+    emitTasksChanged();
   }
 
   return (
@@ -98,23 +105,28 @@ export function TaskStatusMenu({
     }
 
     setBusy(true);
-    const result = await tasksService.updateTask(
+    const result = await tasksService.updateTaskStatus(
       selectedWorkspace.id,
       task.id,
-      { status },
+      { status, version: task.version },
     );
     setBusy(false);
 
     if (!result.ok) {
       toast({
-        title: "Couldn't update status",
-        description: result.message,
+        title: isConflictError(result.code)
+          ? "Task was updated elsewhere"
+          : "Couldn't update status",
+        description: isConflictError(result.code)
+          ? "Reload the list and try again."
+          : result.message,
         tone: "error",
       });
       return;
     }
 
     onUpdated(result.data);
+    emitTasksChanged();
   }
 
   if (disabled) {

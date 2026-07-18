@@ -1,0 +1,25 @@
+.pickerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-color-primary-soft);
+  color: var(--ds-color-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.select {
+  flex: 1;
+  min-width: 0;
+}

@@ -10,10 +10,7 @@ import {
   addCalendarDays,
   zonedDateTimeToUtc,
 } from "../src/lib/timezone.js";
-import {
-  registerAndLogin,
-  registerLoginAndCreateWorkspace,
-} from "./helpers.js";
+import { registerAndLogin, registerLoginAndCreateWorkspace } from "./helpers.js";
 
 async function inviteAndAcceptMember(options: {
   app: Express;
@@ -140,6 +137,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
       data: [
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 1,
           title: "Due today open",
           status: "TODO",
           dueDate: todayDue,
@@ -148,6 +146,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 2,
           title: "Overdue open",
           status: "IN_PROGRESS",
           dueDate: yesterday,
@@ -156,6 +155,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 3,
           title: "No deadline",
           status: "TODO",
           dueDate: null,
@@ -164,6 +164,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 4,
           title: "Cancelled past due",
           status: "CANCELLED",
           dueDate: yesterday,
@@ -172,6 +173,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 5,
           title: "Done recently",
           status: "DONE",
           dueDate: todayDue,
@@ -181,6 +183,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 6,
           title: "Blocked open",
           status: "TODO",
           isBlocked: true,
@@ -251,6 +254,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
       data: [
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 1,
           title: "Owner only",
           createdById: owner.userId!,
           assigneeId: owner.userId!,
@@ -258,6 +262,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 2,
           title: "Assigned to member",
           createdById: owner.userId!,
           assigneeId: member.userId,
@@ -265,6 +270,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 3,
           title: "Created by member",
           createdById: member.userId,
           assigneeId: other.userId,
@@ -272,6 +278,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 4,
           title: "Other private",
           createdById: other.userId,
           assigneeId: other.userId,
@@ -467,27 +474,19 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
       .set("Authorization", `Bearer ${owner.accessToken}`);
     expect(ownerFeed.status).toBe(200);
     expect(
-      ownerFeed.body.data.some(
-        (e: { action: string }) => e.action === "secret.reset",
-      ),
+      ownerFeed.body.data.some((e: { action: string }) => e.action === "secret.reset"),
     ).toBe(false);
     expect(
-      ownerFeed.body.data.some((e: { action: string }) =>
-        e.action.startsWith("task."),
-      ),
+      ownerFeed.body.data.some((e: { action: string }) => e.action.startsWith("task.")),
     ).toBe(true);
 
     const memberFeed = await request(owner.app)
       .get(`/api/v1/workspaces/${owner.workspaceId}/dashboard/activity`)
       .set("Authorization", `Bearer ${member.accessToken}`);
     expect(memberFeed.status).toBe(200);
-    const actions = memberFeed.body.data.map(
-      (e: { summary: string }) => e.summary,
-    );
+    const actions = memberFeed.body.data.map((e: { summary: string }) => e.summary);
     expect(actions.some((s: string) => s.includes("Member task"))).toBe(true);
-    expect(actions.some((s: string) => s.includes("Owner private task"))).toBe(
-      false,
-    );
+    expect(actions.some((s: string) => s.includes("Owner private task"))).toBe(false);
 
     const auditCount = await prisma.auditLog.count({
       where: { workspaceId: owner.workspaceId! },
@@ -548,37 +547,29 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
     expect(created.body.data.status).toBe("DONE");
 
     const detail = await request(owner.app)
-      .get(
-        `/api/v1/workspaces/${owner.workspaceId}/tasks/${created.body.data.id}`,
-      )
+      .get(`/api/v1/workspaces/${owner.workspaceId}/tasks/${created.body.data.id}`)
       .set("Authorization", `Bearer ${owner.accessToken}`);
     expect(detail.status).toBe(200);
     expect(detail.body.data.id).toBe(created.body.data.id);
     expect(detail.body.data.completedAt).toBe(created.body.data.completedAt);
 
     const hidden = await request(owner.app)
-      .get(
-        `/api/v1/workspaces/${owner.workspaceId}/tasks/${created.body.data.id}`,
-      )
+      .get(`/api/v1/workspaces/${owner.workspaceId}/tasks/${created.body.data.id}`)
       .set("Authorization", `Bearer ${member.accessToken}`);
     expect(hidden.status).toBe(404);
 
     const reopen = await request(owner.app)
-      .patch(
-        `/api/v1/workspaces/${owner.workspaceId}/tasks/${created.body.data.id}`,
-      )
+      .patch(`/api/v1/workspaces/${owner.workspaceId}/tasks/${created.body.data.id}`)
       .set("Authorization", `Bearer ${owner.accessToken}`)
-      .send({ status: "TODO" });
+      .send({ status: "TODO", version: created.body.data.version });
     expect(reopen.status).toBe(200);
     expect(reopen.body.data.status).toBe("TODO");
     expect(reopen.body.data.completedAt).toBeNull();
 
     const completeAgain = await request(owner.app)
-      .patch(
-        `/api/v1/workspaces/${owner.workspaceId}/tasks/${created.body.data.id}`,
-      )
+      .patch(`/api/v1/workspaces/${owner.workspaceId}/tasks/${created.body.data.id}`)
       .set("Authorization", `Bearer ${owner.accessToken}`)
-      .send({ status: "DONE" });
+      .send({ status: "DONE", version: reopen.body.data.version });
     expect(completeAgain.status).toBe(200);
     expect(completeAgain.body.data.completedAt).toBeTruthy();
   });
@@ -603,11 +594,13 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
 
     const forbidden = await request(owner.app)
       .delete(`/api/v1/workspaces/${owner.workspaceId}/tasks/${taskId}`)
+      .query({ version: task.body.data.version })
       .set("Authorization", `Bearer ${member.accessToken}`);
     expect(forbidden.status).toBe(404);
 
     const deleted = await request(owner.app)
       .delete(`/api/v1/workspaces/${owner.workspaceId}/tasks/${taskId}`)
+      .query({ version: task.body.data.version })
       .set("Authorization", `Bearer ${owner.accessToken}`);
     expect(deleted.status).toBe(200);
     expect(deleted.body.data).toMatchObject({
@@ -695,6 +688,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
       data: [
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 1,
           title: "MW today",
           status: "TODO",
           dueDate: todayDue,
@@ -703,6 +697,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 2,
           title: "MW upcoming",
           status: "TODO",
           dueDate: tomorrowDue,
@@ -711,6 +706,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 3,
           title: "MW overdue",
           status: "TODO",
           dueDate: yesterday,
@@ -719,6 +715,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 4,
           title: "MW in progress",
           status: "IN_PROGRESS",
           dueDate: tomorrowDue,
@@ -727,6 +724,7 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
         },
         {
           workspaceId: owner.workspaceId!,
+          taskNumber: 5,
           title: "MW completed local late",
           status: "DONE",
           dueDate: todayDue,
@@ -753,9 +751,9 @@ describe("phase 4 dashboard, tasks, parse, activity", () => {
       expect(res.status).toBe(200);
       expect(res.body.data.tab).toBe(tab);
       expect(res.body.data.total).toBeGreaterThanOrEqual(1);
-      expect(
-        res.body.data.items.some((t: { title: string }) => t.title === title),
-      ).toBe(true);
+      expect(res.body.data.items.some((t: { title: string }) => t.title === title)).toBe(
+        true,
+      );
     }
 
     const summary = await request(owner.app)
