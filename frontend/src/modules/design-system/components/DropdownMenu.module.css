@@ -4,27 +4,20 @@
 }
 
 .menu {
-  position: absolute;
-  top: calc(100% + 6px);
+  /* Portaled to document.body so overflow frames (task tables) do not grow/scroll. */
+  position: fixed;
   z-index: var(--ds-z-dropdown);
   min-width: 200px;
-  max-width: 320px;
+  max-width: min(320px, calc(100vw - 16px));
   max-height: min(420px, 70vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px;
   background: var(--ds-color-surface);
   border: 1px solid var(--ds-color-border);
   border-radius: var(--ds-radius-md);
   box-shadow: var(--ds-shadow-md);
   animation: ds-menu-in var(--ds-transition-fast) both;
-}
-
-.alignStart {
-  left: 0;
-}
-
-.alignEnd {
-  right: 0;
 }
 
 .item {

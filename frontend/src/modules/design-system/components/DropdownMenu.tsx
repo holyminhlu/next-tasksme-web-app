@@ -6,15 +6,18 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
-import { useMenuKeyboardNav, useOutsideClick } from "../hooks";
+import { useMenuKeyboardNav, useMounted, useOutsideClick } from "../hooks";
 import styles from "./DropdownMenu.module.css";
 
 type MenuContextValue = {
@@ -22,6 +25,9 @@ type MenuContextValue = {
 };
 
 const MenuContext = createContext<MenuContextValue | null>(null);
+
+const VIEWPORT_GAP = 8;
+const MENU_GAP = 6;
 
 export type MenuTriggerProps = {
   ref: RefObject<HTMLButtonElement | null>;
@@ -42,6 +48,57 @@ export type DropdownMenuProps = {
   menuClassName?: string;
 };
 
+type MenuPosition = {
+  top: number;
+  left: number;
+  maxHeight: number;
+  minWidth: number;
+};
+
+function computeMenuPosition(
+  trigger: DOMRect,
+  menu: DOMRect | null,
+  align: "start" | "end",
+): MenuPosition {
+  const viewportHeight = window.innerHeight;
+  const viewportWidth = window.innerWidth;
+  const menuWidth = Math.min(
+    menu?.width ?? Math.max(200, trigger.width),
+    viewportWidth - VIEWPORT_GAP * 2,
+  );
+  const measuredHeight = menu?.height;
+
+  const spaceBelow = viewportHeight - trigger.bottom - VIEWPORT_GAP;
+  const spaceAbove = trigger.top - VIEWPORT_GAP;
+  const estimated =
+    measuredHeight ?? Math.min(280, Math.max(spaceBelow, spaceAbove));
+  const openAbove =
+    spaceBelow < Math.min(estimated, 240) && spaceAbove > spaceBelow;
+
+  const available = openAbove ? spaceAbove : spaceBelow;
+  const maxHeight = Math.max(120, available - MENU_GAP);
+  const height = measuredHeight
+    ? Math.min(measuredHeight, maxHeight)
+    : Math.min(estimated, maxHeight);
+
+  let left = align === "end" ? trigger.right - menuWidth : trigger.left;
+  left = Math.min(
+    Math.max(VIEWPORT_GAP, left),
+    viewportWidth - menuWidth - VIEWPORT_GAP,
+  );
+
+  const top = openAbove
+    ? Math.max(VIEWPORT_GAP, trigger.top - MENU_GAP - height)
+    : trigger.bottom + MENU_GAP;
+
+  return {
+    top,
+    left,
+    maxHeight,
+    minWidth: Math.max(200, trigger.width),
+  };
+}
+
 export function DropdownMenu({
   trigger,
   children,
@@ -51,9 +108,11 @@ export function DropdownMenu({
   menuClassName = "",
 }: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<MenuPosition | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuId = useId();
+  const mounted = useMounted();
   const handleMenuKeys = useMenuKeyboardNav(menuRef);
 
   const close = useCallback(() => {
@@ -62,21 +121,56 @@ export function DropdownMenu({
 
   useOutsideClick([menuRef, triggerRef], open, close);
 
+  const updatePosition = useCallback(() => {
+    const triggerEl = triggerRef.current;
+    if (!triggerEl) {
+      return;
+    }
+
+    const next = computeMenuPosition(
+      triggerEl.getBoundingClientRect(),
+      menuRef.current?.getBoundingClientRect() ?? null,
+      align,
+    );
+    setPosition(next);
+  }, [align]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    updatePosition();
+  }, [open, updatePosition]);
+
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    // Move focus to the first enabled item once the menu renders.
+    // Re-measure after paint so maxHeight / flip use the real menu size.
     const frame = requestAnimationFrame(() => {
+      updatePosition();
       const first = menuRef.current?.querySelector<HTMLElement>(
         "[role='menuitem']:not([aria-disabled='true']), [role='menuitemradio']:not([aria-disabled='true'])",
       );
       first?.focus();
     });
 
-    return () => cancelAnimationFrame(frame);
-  }, [open]);
+    function onReposition() {
+      updatePosition();
+    }
+
+    // Capture scroll from nested overflow containers (task table frames).
+    window.addEventListener("resize", onReposition);
+    document.addEventListener("scroll", onReposition, true);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onReposition);
+      document.removeEventListener("scroll", onReposition, true);
+    };
+  }, [open, updatePosition]);
 
   const contextValue = useMemo<MenuContextValue>(() => ({ close }), [close]);
 
@@ -103,6 +197,31 @@ export function DropdownMenu({
     }
   }
 
+  const menuStyle: CSSProperties = {
+    top: position?.top ?? 0,
+    left: position?.left ?? 0,
+    maxHeight: position?.maxHeight,
+    minWidth: position?.minWidth,
+    visibility: position ? "visible" : "hidden",
+  };
+
+  const menu =
+    open && mounted ? (
+      <div
+        ref={menuRef}
+        id={menuId}
+        role="menu"
+        aria-label={menuLabel}
+        className={`${styles.menu} ${menuClassName}`.trim()}
+        style={menuStyle}
+        onKeyDown={onMenuKeyDown}
+      >
+        <MenuContext.Provider value={contextValue}>
+          {children}
+        </MenuContext.Provider>
+      </div>
+    ) : null;
+
   return (
     <div className={`${styles.wrapper} ${className}`.trim()}>
       {trigger(
@@ -116,20 +235,7 @@ export function DropdownMenu({
         },
         open,
       )}
-      {open && (
-        <div
-          ref={menuRef}
-          id={menuId}
-          role="menu"
-          aria-label={menuLabel}
-          className={`${styles.menu} ${align === "end" ? styles.alignEnd : styles.alignStart} ${menuClassName}`.trim()}
-          onKeyDown={onMenuKeyDown}
-        >
-          <MenuContext.Provider value={contextValue}>
-            {children}
-          </MenuContext.Provider>
-        </div>
-      )}
+      {menu ? createPortal(menu, document.body) : null}
     </div>
   );
 }

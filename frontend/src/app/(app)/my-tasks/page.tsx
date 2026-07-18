@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { CheckSquare, Plus, Search } from "lucide-react";
+import { CheckSquare, Download, Plus, Search } from "lucide-react";
 import { hasPermission, useAuth } from "@/modules/auth";
 import {
   Badge,
@@ -33,6 +33,12 @@ import {
   type TaskColumnKey,
 } from "@/modules/tasks/components/TaskFilterBar";
 import { TaskBulkActionBar } from "@/modules/tasks/components/TaskBulkActionBar";
+import { TaskBoardView } from "@/modules/tasks/components/TaskBoardView";
+import { TaskCalendarView } from "@/modules/tasks/components/TaskCalendarView";
+import { TaskExportDialog } from "@/modules/tasks/components/TaskExportDialog";
+import { TaskSavedViewsMenu } from "@/modules/tasks/components/TaskSavedViewsMenu";
+import { TaskTimelineView } from "@/modules/tasks/components/TaskTimelineView";
+import { TaskViewToggle } from "@/modules/tasks/components/TaskViewToggle";
 import {
   TASK_PRIORITY_LABELS,
   TASK_PRIORITY_TONES,
@@ -46,8 +52,9 @@ import {
   formatTaskNumber,
   hasWorkspaceTaskScope,
   parseTaskFilterState,
+  parseTaskViewUrlState,
   resolveTaskListViewPreset,
-  serializeTaskFilterState,
+  serializeTaskPageUrlState,
   subscribeTasksChanged,
   taskFilterHasActiveFilters,
   taskFilterStateToListFilters,
@@ -57,10 +64,12 @@ import {
   type TaskFilterState,
   type TaskListViewPreset,
   type TaskRecord,
+  type TaskViewUrlState,
 } from "@/modules/tasks";
 import { PageHeader, useShell } from "@/modules/shell";
 import styles from "../app-pages.module.css";
 import pageStyles from "./my-tasks.module.css";
+import viewStyles from "@/modules/tasks/components/task-views.module.css";
 
 const PAGE_SIZE = 20;
 
@@ -89,6 +98,10 @@ function MyTasksContent() {
     () => parseTaskFilterState(searchParams),
     [searchParams],
   );
+  const viewState = useMemo(
+    () => parseTaskViewUrlState(searchParams),
+    [searchParams],
+  );
   const viewPreset = resolveTaskListViewPreset(filterState);
   // Phase 4: workspace-scope roles default to tasks assigned to the current
   // user unless assignee/unassigned is set explicitly in the URL.
@@ -106,7 +119,33 @@ function MyTasksContent() {
   );
   const [projects, setProjects] = useState<CandidateOption[]>([]);
   const [members, setMembers] = useState<CandidateOption[]>([]);
+  const [exportOpen, setExportOpen] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
+
+  const replacePageUrl = useCallback(
+    (
+      nextFilters: TaskFilterState,
+      nextView: TaskViewUrlState,
+      extras?: { taskId?: string | null },
+    ) => {
+      const next = serializeTaskPageUrlState(nextFilters, nextView);
+      if (extras && "taskId" in extras) {
+        if (extras.taskId) {
+          next.set("taskId", extras.taskId);
+        } else {
+          next.delete("taskId");
+        }
+      } else {
+        const existing = searchParams.get("taskId");
+        if (existing) {
+          next.set("taskId", existing);
+        }
+      }
+      const query = next.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname);
+    },
+    [router, pathname, searchParams],
+  );
 
   const setFilterPatch = useCallback(
     (patch: Partial<TaskFilterState>) => {
@@ -115,11 +154,30 @@ function MyTasksContent() {
         ...patch,
         page: "page" in patch ? (patch.page ?? 1) : 1,
       };
-      const next = serializeTaskFilterState(nextState);
-      const query = next.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname);
+      replacePageUrl(nextState, viewState);
     },
-    [filterState, router, pathname],
+    [filterState, viewState, replacePageUrl],
+  );
+
+  const setViewPatch = useCallback(
+    (patch: Partial<TaskViewUrlState>) => {
+      replacePageUrl(filterState, { ...viewState, ...patch });
+    },
+    [filterState, viewState, replacePageUrl],
+  );
+
+  const applySavedView = useCallback(
+    (next: {
+      filters: Partial<TaskFilterState>;
+      view: Partial<TaskViewUrlState>;
+    }) => {
+      replacePageUrl(
+        { ...filterState, ...next.filters, page: 1 },
+        { ...viewState, ...next.view },
+        { taskId: null },
+      );
+    },
+    [filterState, viewState, replacePageUrl],
   );
 
   const fetcher = useCallback(
@@ -135,7 +193,9 @@ function MyTasksContent() {
     [workspaceId, filterState, listDefaultAssignee, timezone],
   );
 
-  const state = useWidget(workspaceId ? fetcher : null);
+  const state = useWidget(
+    workspaceId && viewState.view === "list" ? fetcher : null,
+  );
 
   useEffect(() => subscribeTasksChanged(() => state.reload()), [state]);
 
@@ -232,8 +292,43 @@ function MyTasksContent() {
     );
     setSelectedIds((current) => current.filter((id) => id !== taskId));
     setSelectedTask((current) => (current?.id === taskId ? null : current));
-    state.reload();
+    replacePageUrl(filterState, viewState, { taskId: null });
+    if (viewState.view === "list") {
+      state.reload();
+    }
   }
+
+  function openTask(task: TaskRecord) {
+    setSelectedTask(task);
+    replacePageUrl(filterState, viewState, { taskId: task.id });
+  }
+
+  function closeTaskDetail() {
+    setSelectedTask(null);
+    replacePageUrl(filterState, viewState, { taskId: null });
+  }
+
+  useEffect(() => {
+    const taskId = searchParams.get("taskId");
+    if (!taskId || !workspaceId) {
+      return;
+    }
+
+    if (selectedTask?.id === taskId) {
+      return;
+    }
+
+    let cancelled = false;
+    void tasksService.getTask(workspaceId, taskId).then((result) => {
+      if (!cancelled && result.ok) {
+        setSelectedTask(result.data);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, workspaceId, selectedTask?.id]);
 
   async function handleRestore(task: TaskRecord) {
     if (!workspaceId || !canRestore) {
@@ -280,6 +375,7 @@ function MyTasksContent() {
 
   const selectedTasks = items.filter((task) => selectedIds.includes(task.id));
   const show = (key: TaskColumnKey) => visibleColumns.includes(key);
+  const isListView = viewState.view === "list";
 
   if (!hasPermission(permissions, "tasks:read")) {
     return (
@@ -302,13 +398,25 @@ function MyTasksContent() {
               : "Tasks assigned to you across all projects in this workspace."
         }
         actions={
-          hasPermission(permissions, "tasks:create") && !tasksModuleDisabled ? (
-            <Button
-              iconLeft={<Plus size={16} aria-hidden />}
-              onClick={() => setQuickCreate("task")}
-            >
-              New task
-            </Button>
+          !tasksModuleDisabled ? (
+            <div className={viewStyles.toolbarActions}>
+              <Button
+                variant="secondary"
+                size="sm"
+                iconLeft={<Download size={15} aria-hidden />}
+                onClick={() => setExportOpen(true)}
+              >
+                Export
+              </Button>
+              {hasPermission(permissions, "tasks:create") ? (
+                <Button
+                  iconLeft={<Plus size={16} aria-hidden />}
+                  onClick={() => setQuickCreate("task")}
+                >
+                  New task
+                </Button>
+              ) : null}
+            </div>
           ) : undefined
         }
       />
@@ -326,10 +434,26 @@ function MyTasksContent() {
         />
       ) : (
         <>
+          <div className={viewStyles.toolbarRow}>
+            <TaskViewToggle
+              value={viewState.view}
+              onChange={(view) => setViewPatch({ view })}
+            />
+            {workspaceId && (
+              <TaskSavedViewsMenu
+                workspaceId={workspaceId}
+                filterState={filterState}
+                viewState={viewState}
+                columns={visibleColumns}
+                onApply={applySavedView}
+              />
+            )}
+          </div>
+
           <div
             className={pageStyles.viewPresets}
             role="tablist"
-            aria-label="Task views"
+            aria-label="Task lifecycle"
           >
             <button
               type="button"
@@ -374,7 +498,7 @@ function MyTasksContent() {
             onVisibleColumnsChange={handleVisibleColumnsChange}
           />
 
-          {selectedTasks.length > 0 && (
+          {isListView && selectedTasks.length > 0 && (
             <TaskBulkActionBar
               selectedTasks={selectedTasks}
               projects={projects}
@@ -393,7 +517,39 @@ function MyTasksContent() {
             />
           )}
 
-          {state.loading ? (
+          {viewState.view === "board" && workspaceId ? (
+            <TaskBoardView
+              filterState={filterState}
+              timezone={timezone}
+              defaultAssigneeId={listDefaultAssignee}
+              onOpenTask={openTask}
+            />
+          ) : viewState.view === "calendar" && workspaceId ? (
+            <TaskCalendarView
+              workspaceId={workspaceId}
+              filterState={filterState}
+              calMode={viewState.calMode}
+              onCalModeChange={(calMode) => setViewPatch({ calMode })}
+              timezone={timezone}
+              defaultAssigneeId={listDefaultAssignee}
+              onOpenTask={openTask}
+              onCreateOnDay={(ymd) =>
+                setQuickCreate("task", { initialDueDate: ymd })
+              }
+            />
+          ) : viewState.view === "timeline" && workspaceId ? (
+            <TaskTimelineView
+              workspaceId={workspaceId}
+              filterState={filterState}
+              tlZoom={viewState.tlZoom}
+              groupBy={viewState.groupBy}
+              onTlZoomChange={(tlZoom) => setViewPatch({ tlZoom })}
+              onGroupByChange={(groupBy) => setViewPatch({ groupBy })}
+              timezone={timezone}
+              defaultAssigneeId={listDefaultAssignee}
+              onOpenTask={openTask}
+            />
+          ) : state.loading ? (
             <LoadingState label="Loading tasks..." />
           ) : state.error ? (
             <ErrorState
@@ -519,7 +675,7 @@ function MyTasksContent() {
                               <button
                                 type="button"
                                 className={pageStyles.titleButton}
-                                onClick={() => setSelectedTask(task)}
+                                onClick={() => openTask(task)}
                               >
                                 <span
                                   className={`${pageStyles.taskTitle} ${task.status === "DONE" ? pageStyles.taskTitleDone : ""}`.trim()}
@@ -591,12 +747,16 @@ function MyTasksContent() {
                                     <TaskQuickComplete
                                       task={task}
                                       onUpdated={applyUpdate}
-                                      disabled={!canUpdate || Boolean(task.deletedAt)}
+                                      disabled={
+                                        !canUpdate || Boolean(task.deletedAt)
+                                      }
                                     />
                                     <TaskStatusMenu
                                       task={task}
                                       onUpdated={applyUpdate}
-                                      disabled={!canUpdate || Boolean(task.deletedAt)}
+                                      disabled={
+                                        !canUpdate || Boolean(task.deletedAt)
+                                      }
                                     />
                                   </>
                                 )}
@@ -633,7 +793,7 @@ function MyTasksContent() {
                         <button
                           type="button"
                           className={pageStyles.titleButton}
-                          onClick={() => setSelectedTask(task)}
+                          onClick={() => openTask(task)}
                         >
                           <span className={pageStyles.taskNumber}>
                             {formatTaskNumber(task.taskNumber)}
@@ -717,11 +877,22 @@ function MyTasksContent() {
 
       <TaskDetailDialog
         task={selectedTask}
-        onClose={() => setSelectedTask(null)}
+        onClose={closeTaskDetail}
         onUpdated={applyUpdate}
         onDeleted={applyDelete}
         canUpdate={canUpdate}
       />
+
+      {workspaceId && (
+        <TaskExportDialog
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+          workspaceId={workspaceId}
+          filterState={filterState}
+          selectedIds={selectedIds}
+          timezone={timezone}
+        />
+      )}
     </div>
   );
 }

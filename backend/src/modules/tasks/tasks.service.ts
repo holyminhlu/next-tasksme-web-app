@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import type { Prisma } from "../../../generated/prisma/client.js";
 import { prisma } from "../../config/database.js";
 import {
@@ -9,25 +10,51 @@ import {
 } from "../../lib/errors.js";
 import { buildPaginationMeta, getPagination } from "../../lib/pagination.js";
 import {
+  nextRankAfter,
+  rankBetween,
+  rebalanceRanks,
+} from "../../lib/rank.js";
+import {
   buildTaskVisibilityWhere,
   hasWorkspaceTaskScope,
-  OPEN_TASK_STATUSES,
 } from "../../lib/task-scope.js";
-import { resolveDashboardRange } from "../../lib/timezone.js";
+import { formatYmd } from "../../lib/timezone.js";
 import { recordActivity } from "../../services/activity.service.js";
+import { writeAuditLog } from "../../services/audit.service.js";
 import { parseTaskText as parseTaskDraft } from "./parse.service.js";
+import {
+  buildTaskListWhere,
+  buildUnscheduledWhere,
+  resolveTaskTimezone,
+} from "./task-filters.js";
 import type {
   AssigneeMutationInput,
+  BoardTasksQuery,
   BulkDeleteInput,
   BulkUpdateInput,
+  CalendarTasksQuery,
   CreateTaskInput,
+  ExportTasksInput,
   ListTasksQuery,
+  MoveTaskInput,
   ParseTaskInput,
   StatusMutationInput,
   TaskActivityQuery,
+  TimelineTasksQuery,
   UpdateTaskInput,
   VersionMutationInput,
 } from "./tasks.schemas.js";
+
+export const EXPORT_ROW_LIMIT = 5000;
+const EXPORT_DEFAULT_COLUMNS = [
+  "taskNumber",
+  "title",
+  "status",
+  "priority",
+  "project",
+  "assignee",
+  "dueDate",
+] as const;
 
 type Actor = { userId: string; roleKey: string };
 const TASK_INCLUDE = {
@@ -69,6 +96,7 @@ function mapTask(task: TaskWithPeople) {
     creator: mapPerson(task.creator),
     assigneeId: task.assigneeId,
     assignee: mapPerson(task.assignee),
+    rank: task.rank,
     version: task.version,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
@@ -76,6 +104,25 @@ function mapTask(task: TaskWithPeople) {
     deletedAt: task.deletedAt?.toISOString() ?? null,
     deleted: task.deletedAt !== null,
   };
+}
+
+function sanitizeExportCell(value: string): string {
+  if (/^[=+\-@\t\r]/.test(value)) {
+    return `'${value}`;
+  }
+  return value;
+}
+
+function formatExportDate(
+  value: Date | null,
+  timezone: string,
+  dateFormat: "iso" | "locale",
+): string {
+  if (!value) return "";
+  if (dateFormat === "locale") {
+    return formatYmd(value, timezone);
+  }
+  return value.toISOString();
 }
 
 function isAdmin(actor: Actor) {
@@ -206,6 +253,7 @@ function activitySummary(action: string, title: string) {
     "task.unarchived": "Unarchived",
     "task.deleted": "Deleted",
     "task.restored": "Restored",
+    "task.moved": "Moved",
   };
   return `${verb[action] ?? "Updated"} task "${title}"`;
 }
@@ -256,60 +304,30 @@ async function createAssignmentNotification(
 }
 
 export class TasksService {
-  async listTasks(workspaceId: string, actor: Actor, query: ListTasksQuery) {
-    if (query.includeDeleted && !isAdmin(actor)) {
-      throw new ForbiddenError("Only workspace owners and admins may list deleted tasks");
-    }
-    const pagination = getPagination(query);
+  private async requireWorkspace(workspaceId: string) {
     const workspace = await prisma.workspace.findFirst({
       where: { id: workspaceId, deletedAt: null },
     });
     if (!workspace) throw new NotFoundError("Workspace not found");
-    const range = resolveDashboardRange({
-      timezone: query.timezone ?? workspace.timezone,
-    });
-    const where: Prisma.TaskWhereInput = {
-      ...buildTaskVisibilityWhere({
-        workspaceId,
-        userId: actor.userId,
-        roleKey: actor.roleKey,
-        status: query.status,
-        includeArchived: query.includeArchived,
-        includeDeleted: query.includeDeleted,
-      }),
-      ...(query.projectId?.length ? { projectId: { in: query.projectId } } : {}),
-      ...(query.priority?.length ? { priority: { in: query.priority } } : {}),
-      ...(query.assigneeId ? { assigneeId: query.assigneeId } : {}),
-      ...(query.createdById ? { createdById: query.createdById } : {}),
-      ...(query.unassigned ? { assigneeId: null } : {}),
-    };
-    if (query.search) {
-      const taskNumber = /^\d+$/.test(query.search) ? Number(query.search) : null;
-      where.AND = [
-        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-        {
-          OR: [
-            { title: { contains: query.search, mode: "insensitive" } },
-            ...(taskNumber ? [{ taskNumber }] : []),
-          ],
-        },
-      ];
+    return workspace;
+  }
+
+  private assertDeletedListAllowed(actor: Actor, includeDeleted?: boolean) {
+    if (includeDeleted && !isAdmin(actor)) {
+      throw new ForbiddenError("Only workspace owners and admins may list deleted tasks");
     }
-    if (query.deadlineFrom || query.deadlineTo) {
-      where.dueDate = {
-        ...(query.deadlineFrom ? { gte: new Date(query.deadlineFrom) } : {}),
-        ...(query.deadlineTo ? { lte: new Date(query.deadlineTo) } : {}),
-      };
-    } else if (query.due === "today") {
-      where.status = { in: [...OPEN_TASK_STATUSES] };
-      where.dueDate = { gte: range.todayStart, lte: range.todayEnd };
-    } else if (query.due === "overdue" || query.overdue) {
-      where.status = { in: [...OPEN_TASK_STATUSES] };
-      where.dueDate = { lt: new Date(), not: null };
-    } else if (query.due === "upcoming") {
-      where.status = { in: [...OPEN_TASK_STATUSES] };
-      where.dueDate = { gt: range.todayEnd };
-    }
+  }
+
+  async listTasks(workspaceId: string, actor: Actor, query: ListTasksQuery) {
+    this.assertDeletedListAllowed(actor, query.includeDeleted);
+    const pagination = getPagination(query);
+    const workspace = await this.requireWorkspace(workspaceId);
+    const where = buildTaskListWhere(
+      workspaceId,
+      actor,
+      query,
+      workspace.timezone,
+    );
     const orderBy = {
       [query.sortBy]: query.sortOrder,
     } as Prisma.TaskOrderByWithRelationInput;
@@ -325,6 +343,129 @@ export class TasksService {
     ]);
     return {
       items: tasks.map(mapTask),
+      pagination: buildPaginationMeta(query.page, query.pageSize, total),
+    };
+  }
+
+  async listBoardColumn(
+    workspaceId: string,
+    actor: Actor,
+    query: BoardTasksQuery,
+  ) {
+    return this.listTasks(workspaceId, actor, {
+      ...query,
+      status: [query.status],
+      sortBy: query.sortBy ?? "rank",
+      sortOrder: query.sortOrder ?? "asc",
+    });
+  }
+
+  async listCalendar(
+    workspaceId: string,
+    actor: Actor,
+    query: CalendarTasksQuery,
+  ) {
+    this.assertDeletedListAllowed(actor, query.includeDeleted);
+    const workspace = await this.requireWorkspace(workspaceId);
+    const timezone = resolveTaskTimezone(query.timezone, workspace.timezone);
+    const where = buildTaskListWhere(
+      workspaceId,
+      actor,
+      { ...query, timezone },
+      workspace.timezone,
+    );
+    const unscheduledWhere = buildUnscheduledWhere(workspaceId, actor, query);
+    const pagination = getPagination({
+      page: query.page,
+      pageSize: query.pageSize,
+      sortOrder: "asc",
+    });
+    const [total, tasks, unscheduledCount] = await Promise.all([
+      prisma.task.count({ where }),
+      prisma.task.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: [{ dueDate: "asc" }, { startAt: "asc" }, { taskNumber: "asc" }],
+        include: TASK_INCLUDE,
+      }),
+      prisma.task.count({ where: unscheduledWhere }),
+    ]);
+    return {
+      items: tasks.map(mapTask),
+      unscheduledCount,
+      timezone,
+      from: query.from,
+      to: query.to,
+      pagination: buildPaginationMeta(query.page, query.pageSize, total),
+    };
+  }
+
+  async listTimeline(
+    workspaceId: string,
+    actor: Actor,
+    query: TimelineTasksQuery,
+  ) {
+    this.assertDeletedListAllowed(actor, query.includeDeleted);
+    const workspace = await this.requireWorkspace(workspaceId);
+    const timezone = resolveTaskTimezone(query.timezone, workspace.timezone);
+    const where = buildTaskListWhere(
+      workspaceId,
+      actor,
+      { ...query, timezone },
+      workspace.timezone,
+    );
+    // Timeline requires at least one schedule endpoint.
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      {
+        OR: [{ startAt: { not: null } }, { dueDate: { not: null } }],
+      },
+    ];
+    const pagination = getPagination({
+      page: query.page,
+      pageSize: query.pageSize,
+      sortOrder: "asc",
+    });
+    const [total, tasks] = await Promise.all([
+      prisma.task.count({ where }),
+      prisma.task.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: [{ startAt: "asc" }, { dueDate: "asc" }, { taskNumber: "asc" }],
+        include: TASK_INCLUDE,
+      }),
+    ]);
+    const groups = new Map<
+      string,
+      {
+        id: string;
+        label: string;
+        items: ReturnType<typeof mapTask>[];
+      }
+    >();
+    for (const task of tasks) {
+      const mapped = mapTask(task);
+      const key =
+        query.groupBy === "assignee"
+          ? (task.assigneeId ?? "unassigned")
+          : (task.projectId ?? "no-project");
+      const label =
+        query.groupBy === "assignee"
+          ? (task.assignee?.fullName ?? "Unassigned")
+          : (task.project?.name ?? "No project");
+      const group = groups.get(key) ?? { id: key, label, items: [] };
+      group.items.push(mapped);
+      groups.set(key, group);
+    }
+    return {
+      groups: Array.from(groups.values()),
+      items: tasks.map(mapTask),
+      timezone,
+      from: query.from,
+      to: query.to,
+      groupBy: query.groupBy,
       pagination: buildPaginationMeta(query.page, query.pageSize, total),
     };
   }
@@ -354,6 +495,16 @@ export class TasksService {
         create: { workspaceId, nextNumber: 2 },
         update: { nextNumber: { increment: 1 } },
       });
+      const lastInColumn = await tx.task.findFirst({
+        where: {
+          workspaceId,
+          status,
+          projectId: input.projectId ?? null,
+          deletedAt: null,
+        },
+        orderBy: [{ rank: "desc" }, { taskNumber: "desc" }],
+        select: { rank: true },
+      });
       const created = await tx.task.create({
         data: {
           workspaceId,
@@ -362,6 +513,7 @@ export class TasksService {
           description: input.description,
           priority: input.priority ?? "MEDIUM",
           status,
+          rank: nextRankAfter(lastInColumn?.rank),
           startAt,
           dueDate,
           completedAt: status === "DONE" ? now : null,
@@ -380,6 +532,277 @@ export class TasksService {
     });
     await emitTaskActivity("task.created", task, actor);
     return mapTask(task);
+  }
+
+  private async resolveNeighborRank(
+    workspaceId: string,
+    actor: Actor,
+    neighborId: string | null | undefined,
+    targetStatus: MoveTaskInput["targetStatus"],
+    projectId: string | null,
+  ) {
+    if (!neighborId) return null;
+    const neighbor = await getVisibleTask(workspaceId, neighborId, actor, {
+      includeArchived: true,
+    });
+    if (neighbor.status !== targetStatus) {
+      throw new ValidationError("Neighbor task must be in the target status", {
+        field: "beforeTaskId",
+      });
+    }
+    if ((neighbor.projectId ?? null) !== (projectId ?? null)) {
+      throw new ValidationError("Neighbor task must share the same project board", {
+        field: "beforeTaskId",
+      });
+    }
+    return neighbor.rank;
+  }
+
+  private async rebalanceColumn(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    projectId: string | null,
+    status: MoveTaskInput["targetStatus"],
+  ) {
+    const rows = await tx.task.findMany({
+      where: {
+        workspaceId,
+        projectId,
+        status,
+        deletedAt: null,
+      },
+      orderBy: [{ rank: "asc" }, { taskNumber: "asc" }],
+      select: { id: true },
+    });
+    const ranks = rebalanceRanks(rows.length);
+    for (let index = 0; index < rows.length; index += 1) {
+      await tx.task.update({
+        where: { id: rows[index]!.id },
+        data: { rank: ranks[index]! },
+      });
+    }
+    return ranks;
+  }
+
+  async moveTask(
+    workspaceId: string,
+    taskId: string,
+    actor: Actor,
+    input: MoveTaskInput,
+  ) {
+    const existing = await getVisibleTask(workspaceId, taskId, actor, {
+      includeArchived: true,
+    });
+    assertCanMutateTask(actor, existing, "move");
+
+    const beforeRank = await this.resolveNeighborRank(
+      workspaceId,
+      actor,
+      input.beforeTaskId,
+      input.targetStatus,
+      existing.projectId,
+    );
+    const afterRank = await this.resolveNeighborRank(
+      workspaceId,
+      actor,
+      input.afterTaskId,
+      input.targetStatus,
+      existing.projectId,
+    );
+
+    const enteringDone =
+      input.targetStatus === "DONE" && existing.status !== "DONE";
+    const reopening =
+      input.targetStatus !== "DONE" && existing.status === "DONE";
+    const statusChanged = input.targetStatus !== existing.status;
+
+    const task = await prisma.$transaction(async (tx) => {
+      let nextRank = rankBetween(beforeRank, afterRank);
+      if (!nextRank) {
+        await this.rebalanceColumn(
+          tx,
+          workspaceId,
+          existing.projectId,
+          input.targetStatus,
+        );
+        const refreshedBefore = input.beforeTaskId
+          ? await tx.task.findUnique({
+              where: { id: input.beforeTaskId },
+              select: { rank: true },
+            })
+          : null;
+        const refreshedAfter = input.afterTaskId
+          ? await tx.task.findUnique({
+              where: { id: input.afterTaskId },
+              select: { rank: true },
+            })
+          : null;
+        nextRank =
+          rankBetween(refreshedBefore?.rank, refreshedAfter?.rank) ??
+          nextRankAfter(refreshedBefore?.rank);
+      }
+
+      const result = await tx.task.updateMany({
+        where: { id: existing.id, version: input.version },
+        data: {
+          status: input.targetStatus,
+          rank: nextRank,
+          isBlocked: input.targetStatus === "BLOCKED",
+          blockedReason:
+            input.targetStatus === "BLOCKED" ? existing.blockedReason : null,
+          completedAt: enteringDone ? new Date() : reopening ? null : undefined,
+          completedById: enteringDone
+            ? actor.userId
+            : reopening
+              ? null
+              : undefined,
+          version: { increment: 1 },
+        },
+      });
+      if (result.count !== 1) throw new ConflictError("Task version is stale");
+      return tx.task.findUniqueOrThrow({
+        where: { id: existing.id },
+        include: TASK_INCLUDE,
+      });
+    });
+
+    await emitTaskActivity(
+      enteringDone
+        ? "task.completed"
+        : statusChanged
+          ? "task.status_changed"
+          : "task.moved",
+      task,
+      actor,
+    );
+    return mapTask(task);
+  }
+
+  async exportTasks(
+    workspaceId: string,
+    actor: Actor,
+    input: ExportTasksInput,
+    audit: { ipAddress?: string | null; userAgent?: string | null; requestId?: string | null },
+  ) {
+    this.assertDeletedListAllowed(actor, input.filters?.includeDeleted);
+    if (input.scope === "selected" && !input.selectedIds?.length) {
+      throw new ValidationError("selectedIds are required for selected scope", {
+        field: "selectedIds",
+      });
+    }
+    const workspace = await this.requireWorkspace(workspaceId);
+    const timezone = resolveTaskTimezone(input.timezone, workspace.timezone);
+    const where = buildTaskListWhere(
+      workspaceId,
+      actor,
+      {
+        ...input.filters,
+        selectedIds: input.scope === "selected" ? input.selectedIds : undefined,
+        timezone,
+      },
+      workspace.timezone,
+    );
+    const total = await prisma.task.count({ where });
+    if (total > EXPORT_ROW_LIMIT) {
+      throw new ValidationError(
+        `Export exceeds the ${EXPORT_ROW_LIMIT} row limit. Narrow filters and try again.`,
+        { field: "filters", limit: EXPORT_ROW_LIMIT, total },
+      );
+    }
+    const tasks = await prisma.task.findMany({
+      where,
+      take: EXPORT_ROW_LIMIT,
+      orderBy: [{ taskNumber: "asc" }],
+      include: TASK_INCLUDE,
+    });
+    const columns = input.columns?.length
+      ? input.columns
+      : [...EXPORT_DEFAULT_COLUMNS];
+    const headers = columns.map((column) => column);
+    const rows = tasks.map((task) =>
+      columns.map((column) => {
+        switch (column) {
+          case "taskNumber":
+            return String(task.taskNumber);
+          case "title":
+            return sanitizeExportCell(task.title);
+          case "status":
+            return task.status;
+          case "priority":
+            return task.priority;
+          case "project":
+            return sanitizeExportCell(task.project?.name ?? "");
+          case "assignee":
+            return sanitizeExportCell(task.assignee?.fullName ?? "");
+          case "creator":
+            return sanitizeExportCell(task.creator?.fullName ?? "");
+          case "startAt":
+            return formatExportDate(task.startAt, timezone, input.dateFormat);
+          case "dueDate":
+            return formatExportDate(task.dueDate, timezone, input.dateFormat);
+          case "completedAt":
+            return formatExportDate(task.completedAt, timezone, input.dateFormat);
+          case "createdAt":
+            return formatExportDate(task.createdAt, timezone, input.dateFormat);
+          case "updatedAt":
+            return formatExportDate(task.updatedAt, timezone, input.dateFormat);
+          default:
+            return "";
+        }
+      }),
+    );
+
+    await writeAuditLog({
+      action: "tasks.exported",
+      userId: actor.userId,
+      workspaceId,
+      entityType: "task_export",
+      metadata: {
+        format: input.format,
+        scope: input.scope,
+        rowCount: tasks.length,
+        columns,
+        timezone,
+      },
+      ipAddress: audit.ipAddress,
+      userAgent: audit.userAgent,
+      requestId: audit.requestId,
+    });
+
+    if (input.format === "csv") {
+      const escape = (value: string) => {
+        if (/[",\n\r]/.test(value)) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      };
+      const csv = [headers, ...rows]
+        .map((line) => line.map((cell) => escape(cell)).join(","))
+        .join("\n");
+      return {
+        format: "csv" as const,
+        filename: `tasks-export-${formatYmd(new Date(), timezone)}.csv`,
+        contentType: "text/csv; charset=utf-8",
+        body: Buffer.from(`\uFEFF${csv}`, "utf8"),
+        rowCount: tasks.length,
+      };
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Tasks");
+    sheet.addRow(headers);
+    for (const row of rows) {
+      sheet.addRow(row);
+    }
+    const body = Buffer.from(await workbook.xlsx.writeBuffer());
+    return {
+      format: "xlsx" as const,
+      filename: `tasks-export-${formatYmd(new Date(), timezone)}.xlsx`,
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      body,
+      rowCount: tasks.length,
+    };
   }
 
   async updateTask(

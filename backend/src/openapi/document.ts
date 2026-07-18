@@ -35,15 +35,20 @@ import {
 } from "../modules/projects/projects.schemas.js";
 import {
   assigneeMutationSchema,
+  boardTasksQuerySchema,
   bulkDeleteSchema,
   bulkUpdateSchema,
+  calendarTasksQuerySchema,
   createTaskSchema,
   deleteTaskQuerySchema,
+  exportTasksSchema,
   listTasksQuerySchema,
+  moveTaskSchema,
   parseTaskSchema,
   statusMutationSchema,
   taskActivityQuerySchema,
   taskIdParamsSchema,
+  timelineTasksQuerySchema,
   updateTaskSchema,
   versionMutationSchema,
 } from "../modules/tasks/tasks.schemas.js";
@@ -52,6 +57,11 @@ import {
   notificationParamsSchema,
   updateNotificationPreferenceSchema,
 } from "../modules/notifications/notifications.schemas.js";
+import {
+  createSavedViewSchema,
+  savedViewIdParamsSchema,
+  updateSavedViewSchema,
+} from "../modules/saved-views/saved-views.schemas.js";
 import {
   activityQuerySchema,
   dashboardQuerySchema,
@@ -166,6 +176,11 @@ for (const mutation of [
     schema: assigneeMutationSchema,
     description: "Task assignee changed",
   },
+  {
+    path: "move",
+    schema: moveTaskSchema,
+    description: "Task moved on board (status + rank)",
+  },
 ] as const) {
   registry.registerPath({
     method: "patch",
@@ -179,6 +194,93 @@ for (const mutation of [
     },
   });
 }
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/board",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema, query: boardTasksQuerySchema },
+  responses: { 200: { description: "Kanban column tasks ordered by rank" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/calendar",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema, query: calendarTasksQuerySchema },
+  responses: { 200: { description: "Calendar range tasks (timezone-aware)" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/timeline",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema, query: timelineTasksQuerySchema },
+  responses: { 200: { description: "Timeline groups (not Full Gantt)" } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/export",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema, ...jsonBody(exportTasksSchema) },
+  responses: {
+    200: { description: "Synchronous CSV/XLSX export download" },
+    400: { description: "Validation or row-limit error" },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/saved-views",
+  tags: ["Saved Views"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema },
+  responses: { 200: { description: "Private saved views for current user" } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/saved-views",
+  tags: ["Saved Views"],
+  security: [{ bearerAuth: [] }],
+  request: { params: workspaceIdParamsSchema, ...jsonBody(createSavedViewSchema) },
+  responses: { 201: { description: "Saved view created" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/saved-views/{viewId}",
+  tags: ["Saved Views"],
+  security: [{ bearerAuth: [] }],
+  request: { params: savedViewIdParamsSchema },
+  responses: { 200: { description: "Saved view details" } },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/workspaces/{workspaceId}/saved-views/{viewId}",
+  tags: ["Saved Views"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: savedViewIdParamsSchema,
+    ...jsonBody(updateSavedViewSchema),
+  },
+  responses: { 200: { description: "Saved view updated" } },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/workspaces/{workspaceId}/saved-views/{viewId}",
+  tags: ["Saved Views"],
+  security: [{ bearerAuth: [] }],
+  request: { params: savedViewIdParamsSchema },
+  responses: { 200: { description: "Saved view deleted" } },
+});
 
 for (const lifecycle of ["archive", "unarchive", "restore"] as const) {
   registry.registerPath({
@@ -629,8 +731,9 @@ export function buildOpenApiDocument() {
     openapi: "3.0.3",
     info: {
       title: "TaskMng SME API",
-      version: "5.0.0",
-      description: "Phase 5 Core Task Management & Assignment API",
+      version: "6.0.0",
+      description:
+        "Phase 6 Task Visualization, Saved Views & Data Export API",
     },
     servers: [{ url: "http://localhost:4000" }],
   });

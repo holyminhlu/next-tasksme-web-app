@@ -20,9 +20,19 @@ export type TaskSortBy =
   | "startAt"
   | "dueDate"
   | "createdAt"
-  | "updatedAt";
+  | "updatedAt"
+  | "rank";
 
 export type SortOrder = "asc" | "desc";
+
+/** My Tasks visualization mode (URL `view=`). */
+export type TaskViewMode = "list" | "board" | "calendar" | "timeline";
+
+export type CalendarMode = "month" | "week";
+
+export type TimelineZoom = "day" | "week" | "month";
+
+export type TimelineGroupBy = "project" | "assignee";
 
 /** Normalized task shape used across dashboard and task pages. */
 export type TaskRecord = {
@@ -49,6 +59,8 @@ export type TaskRecord = {
   assigneeRole: string | null;
   createdById: string | null;
   createdByName: string | null;
+  /** Lexorank string used by board ordering. */
+  rank: string | null;
   version: number;
   archivedAt: string | null;
   deletedAt: string | null;
@@ -282,4 +294,157 @@ export type TaskFilterState = {
 
 /** Discoverable My Tasks list presets (URL-serializable). */
 export type TaskListViewPreset = "active" | "archived" | "trash";
+
+/** URL display state for My Tasks views (serializable, F5-safe). */
+export type TaskViewUrlState = {
+  view: TaskViewMode;
+  calMode: CalendarMode;
+  tlZoom: TimelineZoom;
+  groupBy: TimelineGroupBy;
+};
+
+export type MoveTaskInput = {
+  targetStatus: TaskStatus;
+  beforeTaskId?: string | null;
+  afterTaskId?: string | null;
+  version: number;
+};
+
+export type CalendarTasksResult = {
+  items: TaskRecord[];
+  total: number;
+  unscheduledCount: number;
+  timezone: string | null;
+  from: string | null;
+  to: string | null;
+};
+
+export type TimelineGroup = {
+  id: string;
+  label: string;
+  items: TaskRecord[];
+};
+
+export type TimelineTasksResult = {
+  groups: TimelineGroup[];
+  total: number;
+  timezone: string | null;
+  from: string | null;
+  to: string | null;
+  groupBy: TimelineGroupBy;
+};
+
+export type SavedViewType = "LIST" | "BOARD" | "CALENDAR" | "TIMELINE";
+
+export type SavedViewFiltersJson = {
+  search?: string;
+  projectId?: string | null;
+  statuses?: TaskStatus[];
+  priorities?: TaskPriority[];
+  assigneeId?: string | null;
+  createdById?: string | null;
+  due?: "today" | "upcoming" | "overdue" | null;
+  deadlineFrom?: string | null;
+  deadlineTo?: string | null;
+  overdue?: boolean;
+  unassigned?: boolean;
+  includeArchived?: boolean;
+  includeDeleted?: boolean;
+};
+
+export type SavedViewSortJson = {
+  sortBy?: TaskSortBy;
+  sortOrder?: SortOrder;
+};
+
+export type SavedViewGroupByJson = {
+  groupBy?: TimelineGroupBy | "none";
+};
+
+export type SavedViewDisplayOptionsJson = {
+  view?: TaskViewMode;
+  calMode?: CalendarMode;
+  tlZoom?: TimelineZoom;
+  dense?: boolean;
+};
+
+export type SavedViewRecord = {
+  id: string;
+  workspaceId: string;
+  ownerUserId: string;
+  name: string;
+  resourceType: string;
+  viewType: SavedViewType;
+  visibility: string;
+  filtersJson: SavedViewFiltersJson;
+  sortJson: SavedViewSortJson;
+  groupByJson: SavedViewGroupByJson;
+  columnsJson: string[];
+  displayOptionsJson: SavedViewDisplayOptionsJson;
+  configVersion: number;
+  isDefault: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type CreateSavedViewInput = {
+  name: string;
+  viewType?: SavedViewType;
+  filtersJson?: SavedViewFiltersJson;
+  sortJson?: SavedViewSortJson;
+  groupByJson?: SavedViewGroupByJson;
+  columnsJson?: string[];
+  displayOptionsJson?: SavedViewDisplayOptionsJson;
+  isDefault?: boolean;
+};
+
+export type UpdateSavedViewInput = Partial<CreateSavedViewInput>;
+
+export type ExportColumn =
+  | "taskNumber"
+  | "title"
+  | "status"
+  | "priority"
+  | "project"
+  | "assignee"
+  | "creator"
+  | "startAt"
+  | "dueDate"
+  | "completedAt"
+  | "createdAt"
+  | "updatedAt";
+
+export type ExportTasksInput = {
+  format: "csv" | "xlsx";
+  scope?: "filters" | "selected";
+  selectedIds?: string[];
+  columns?: ExportColumn[];
+  timezone?: string;
+  dateFormat?: "iso" | "locale";
+  filters?: {
+    projectId?: string[];
+    assigneeId?: string;
+    createdById?: string;
+    status?: TaskStatus[];
+    priority?: TaskPriority[];
+    due?: "today" | "upcoming" | "overdue";
+    deadlineFrom?: string;
+    deadlineTo?: string;
+    overdue?: boolean;
+    unassigned?: boolean;
+    includeArchived?: boolean;
+    includeDeleted?: boolean;
+    search?: string;
+  };
+};
+
+export type ExportFileResult = {
+  blob: Blob;
+  filename: string;
+  contentType: string;
+  rowCount: number | null;
+};
+
+/** Soft cap mirrored from backend EXPORT_ROW_LIMIT. */
+export const EXPORT_ROW_LIMIT = 5000;
 

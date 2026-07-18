@@ -1,6 +1,6 @@
 .bar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   flex-wrap: wrap;
   gap: 10px;
   padding: 12px 14px;
@@ -14,15 +14,44 @@
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--ds-color-text);
-  align-self: center;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.formRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.formRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-color-border);
+}
+
+.dialogFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .assigneeWrap {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
-  min-width: min(100%, 280px);
 }
 
 .summary {
@@ -33,7 +62,8 @@
 }
 
 @media (max-width: 720px) {
-  .bar {
+  .formRow {
+    flex-direction: column;
     align-items: stretch;
   }
 }

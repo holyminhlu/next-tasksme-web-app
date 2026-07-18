@@ -7,11 +7,14 @@ import { IconButton } from "./Button";
 import { useBodyScrollLock, useFocusTrap, useMounted } from "../hooks";
 import styles from "./Drawer.module.css";
 
+export type DrawerSize = "md" | "lg" | "xl";
+
 export type DrawerProps = {
   open: boolean;
   onClose: () => void;
   title: string;
   side?: "left" | "right";
+  size?: DrawerSize;
   headerActions?: ReactNode;
   footer?: ReactNode;
   children?: ReactNode;
@@ -22,6 +25,7 @@ export function Drawer({
   onClose,
   title,
   side = "right",
+  size = "md",
   headerActions,
   footer,
   children,
@@ -45,7 +49,7 @@ export function Drawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelId}
-        className={`${styles.drawer} ${styles[side]}`}
+        className={`${styles.drawer} ${styles[side]} ${size !== "md" ? styles[size] : ""}`.trim()}
         tabIndex={-1}
       >
         <div className={styles.header}>

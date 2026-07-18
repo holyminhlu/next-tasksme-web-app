@@ -3,13 +3,18 @@ import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { sendSuccess } from "../../lib/response.js";
 import type {
   AssigneeMutationInput,
+  BoardTasksQuery,
   BulkDeleteInput,
   BulkUpdateInput,
+  CalendarTasksQuery,
   CreateTaskInput,
+  ExportTasksInput,
   ListTasksQuery,
+  MoveTaskInput,
   ParseTaskInput,
   StatusMutationInput,
   TaskActivityQuery,
+  TimelineTasksQuery,
   UpdateTaskInput,
   VersionMutationInput,
 } from "./tasks.schemas.js";
@@ -238,6 +243,123 @@ export async function parseTask(
       req.body as ParseTaskInput,
     );
     sendSuccess(res, result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listBoardColumn(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await tasksService.listBoardColumn(
+      getParam(req, "workspaceId"),
+      requireActor(req),
+      req.query as unknown as BoardTasksQuery,
+    );
+    sendSuccess(res, result.items, {
+      meta: { pagination: result.pagination },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listCalendar(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await tasksService.listCalendar(
+      getParam(req, "workspaceId"),
+      requireActor(req),
+      req.query as unknown as CalendarTasksQuery,
+    );
+    sendSuccess(res, result.items, {
+      meta: {
+        pagination: result.pagination,
+        unscheduledCount: result.unscheduledCount,
+        timezone: result.timezone,
+        from: result.from,
+        to: result.to,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listTimeline(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await tasksService.listTimeline(
+      getParam(req, "workspaceId"),
+      requireActor(req),
+      req.query as unknown as TimelineTasksQuery,
+    );
+    sendSuccess(res, result.groups, {
+      meta: {
+        pagination: result.pagination,
+        timezone: result.timezone,
+        from: result.from,
+        to: result.to,
+        groupBy: result.groupBy,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function moveTask(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    sendSuccess(
+      res,
+      await tasksService.moveTask(
+        getParam(req, "workspaceId"),
+        getParam(req, "taskId"),
+        requireActor(req),
+        req.body as MoveTaskInput,
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function exportTasks(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await tasksService.exportTasks(
+      getParam(req, "workspaceId"),
+      requireActor(req),
+      req.body as ExportTasksInput,
+      {
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+        requestId: req.requestId,
+      },
+    );
+    res.setHeader("Content-Type", result.contentType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${result.filename}"`,
+    );
+    res.setHeader("X-Export-Row-Count", String(result.rowCount));
+    res.status(200).send(result.body);
   } catch (error) {
     next(error);
   }

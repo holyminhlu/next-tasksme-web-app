@@ -24,6 +24,7 @@ export const ACTIVITY_ACTIONS = {
   TASK_UNARCHIVED: "task.unarchived",
   TASK_DELETED: "task.deleted",
   TASK_RESTORED: "task.restored",
+  TASK_MOVED: "task.moved",
   PROJECT_CREATED: "project.created",
 } as const;
 

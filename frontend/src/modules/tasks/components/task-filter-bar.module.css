@@ -2,12 +2,14 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: 100%;
 }
 
 .filters {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
   background: var(--ds-color-surface);
   border: 1px solid var(--ds-color-border);
   border-radius: var(--ds-radius-lg);
@@ -17,9 +19,11 @@
 .primaryRow,
 .morePanel {
   display: flex;
+  flex-direction: row;
   align-items: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .morePanel {
@@ -31,13 +35,16 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Fixed basis avoids width:100% inputs forcing each field onto its own row. */
+  flex: 0 1 160px;
   min-width: 140px;
-  flex: 1;
   max-width: 200px;
 }
 
 .searchField {
-  max-width: 260px;
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 280px;
 }
 
 .filterLabel {
@@ -53,6 +60,8 @@
   flex-direction: column;
   gap: 6px;
   padding-bottom: 2px;
+  flex: 0 0 auto;
+  min-width: 160px;
 }
 
 .toolbarActions {
@@ -60,6 +69,7 @@
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex: 0 0 auto;
   flex-wrap: wrap;
 }
 
@@ -111,14 +121,24 @@
 }
 
 @media (max-width: 720px) {
-  .filterField {
-    max-width: none;
+  .filterField,
+  .searchField {
+    flex: 1 1 calc(50% - 8px);
     min-width: calc(50% - 8px);
+    max-width: none;
   }
 
   .toolbarActions {
     margin-left: 0;
     width: 100%;
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .filterField,
+  .searchField {
+    flex: 1 1 100%;
+    min-width: 100%;
   }
 }

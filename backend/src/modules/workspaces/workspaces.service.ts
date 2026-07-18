@@ -1127,6 +1127,7 @@ export class WorkspacesService {
       });
 
       const tasks = [];
+      let onboardingRank = 1000;
       for (const taskInput of input.tasks ?? []) {
         const counter = await tx.workspaceTaskCounter.update({
           where: { workspaceId },
@@ -1144,9 +1145,11 @@ export class WorkspacesService {
             createdById: userId,
             assigneeId: userId,
             status: "TODO",
+            rank: String(onboardingRank).padStart(16, "0"),
             source: "ONBOARDING",
           },
         });
+        onboardingRank += 1000;
         tasks.push(task);
       }
 

@@ -8,6 +8,7 @@ import { dashboardRouter } from "../dashboard/dashboard.routes.js";
 import { projectsRouter } from "../projects/projects.routes.js";
 import { tasksRouter } from "../tasks/tasks.routes.js";
 import { notificationsRouter } from "../notifications/notifications.routes.js";
+import { savedViewsRouter } from "../saved-views/saved-views.routes.js";
 import {
   acceptInvitation,
   applyModulePreset,
@@ -212,3 +213,4 @@ workspacesRouter.use("/:workspaceId/tasks", tasksRouter);
 workspacesRouter.use("/:workspaceId/projects", projectsRouter);
 workspacesRouter.use("/:workspaceId/dashboard", dashboardRouter);
 workspacesRouter.use("/:workspaceId/notifications", notificationsRouter);
+workspacesRouter.use("/:workspaceId/saved-views", savedViewsRouter);

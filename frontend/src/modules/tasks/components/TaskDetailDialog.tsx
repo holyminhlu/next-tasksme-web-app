@@ -631,6 +631,7 @@ export function TaskDetailDialog({
       onClose={onClose}
       title={current.title}
       side="right"
+      size="xl"
       headerActions={
         taskCode ? (
           <Badge tone="neutral">{taskCode}</Badge>
