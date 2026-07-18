@@ -314,6 +314,7 @@ export const DEFAULT_TASK_FILTER_STATE: TaskFilterState = {
   unassigned: false,
   includeArchived: false,
   includeDeleted: false,
+  tagIds: [],
   sortBy: "createdAt",
   sortOrder: "desc",
   page: 1,
@@ -902,6 +903,7 @@ export function parseTaskFilterState(
     includeDeleted: parseBooleanParam(
       params.get("includeDeleted") ?? params.get("deleted"),
     ),
+    tagIds: parseMultiParam(params, "tagId"),
     sortBy: normalizeTaskSortBy(params.get("sortBy")) ?? "createdAt",
     sortOrder: normalizeSortOrder(params.get("sortOrder")) ?? "desc",
     page: Math.max(1, Number(params.get("page")) || 1),
@@ -985,6 +987,13 @@ export function serializeTaskFilterState(
   if ("includeDeleted" in state) {
     next.delete("deleted");
     setOrDelete("includeDeleted", state.includeDeleted ? "true" : null);
+  }
+
+  if ("tagIds" in state) {
+    next.delete("tagId");
+    for (const tagId of state.tagIds ?? []) {
+      next.append("tagId", tagId);
+    }
   }
 
   if ("sortBy" in state) {
@@ -1654,6 +1663,7 @@ export function taskFilterStateToListFilters(
     unassigned: state.unassigned || null,
     includeArchived: state.includeArchived || null,
     includeDeleted: state.includeDeleted || null,
+    tagIds: state.tagIds.length ? state.tagIds : null,
     timezone:
       state.due || state.overdue || state.deadlineFrom || state.deadlineTo
         ? (options.timezone ?? null)
@@ -1673,6 +1683,7 @@ export function taskFilterHasActiveFilters(state: TaskFilterState): boolean {
       state.priorities.length ||
       state.assigneeId ||
       state.createdById ||
+      state.tagIds.length ||
       state.due ||
       state.deadlineFrom ||
       state.deadlineTo ||

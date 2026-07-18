@@ -44,6 +44,7 @@ import type {
   UpdateTaskInput,
 } from "../tasks.types";
 import { AssigneePicker } from "./AssigneePicker";
+import { TaskCollaborationPanels } from "./TaskCollaborationPanels";
 import styles from "./task-ui.module.css";
 
 type EditFields = {
@@ -961,6 +962,8 @@ export function TaskDetailDialog({
           <dt>Version</dt>
           <dd>{current.version}</dd>
         </dl>
+
+        <TaskCollaborationPanels task={current} members={workspaceMembers} />
 
         <section className={styles.activitySection} aria-label="Activity">
           <h3 className={styles.activityTitle}>Activity</h3>

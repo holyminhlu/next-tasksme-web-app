@@ -348,12 +348,13 @@ describe("activity / bulk / conflict helpers", () => {
 describe("filter URL parsing / serialization", () => {
   it("parses multi status/priority and deadline flags", () => {
     const params = new URLSearchParams(
-      "status=TODO&status=DONE&priority=HIGH&due=overdue&unassigned=true&sortBy=dueDate&sortOrder=asc&q=report&page=2",
+      "status=TODO&status=DONE&priority=HIGH&tagId=tag-a&tagId=tag-b&due=overdue&unassigned=true&sortBy=dueDate&sortOrder=asc&q=report&page=2",
     );
     const state = parseTaskFilterState(params);
 
     expect(state.statuses).toEqual(["TODO", "DONE"]);
     expect(state.priorities).toEqual(["HIGH"]);
+    expect(state.tagIds).toEqual(["tag-a", "tag-b"]);
     expect(state.due).toBe("overdue");
     expect(state.unassigned).toBe(true);
     expect(state.sortBy).toBe("dueDate");
@@ -368,6 +369,7 @@ describe("filter URL parsing / serialization", () => {
       projectId: "p1",
       statuses: ["TODO"],
       priorities: [],
+      tagIds: ["tag-a", "tag-b"],
       assigneeId: null,
       createdById: null,
       due: "today",
@@ -385,6 +387,7 @@ describe("filter URL parsing / serialization", () => {
     expect(serialized.get("q")).toBe("alpha");
     expect(serialized.get("projectId")).toBe("p1");
     expect(serialized.getAll("status")).toEqual(["TODO"]);
+    expect(serialized.getAll("tagId")).toEqual(["tag-a", "tag-b"]);
     expect(serialized.get("due")).toBe("today");
     expect(serialized.get("sortBy")).toBeNull();
     expect(serialized.get("page")).toBeNull();

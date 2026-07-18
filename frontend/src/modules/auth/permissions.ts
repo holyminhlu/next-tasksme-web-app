@@ -1,5 +1,43 @@
 import type { PermissionKey } from "./auth.types";
 
+const COLLAB_FULL: PermissionKey[] = [
+  "checklist.manage",
+  "tag.view",
+  "tag.create",
+  "tag.update",
+  "tag.delete",
+  "task.tag.manage",
+  "custom_field.view",
+  "custom_field.configure",
+  "custom_field.value.update",
+  "comment.view",
+  "comment.create",
+  "comment.update_own",
+  "comment.delete_own",
+  "comment.moderate",
+  "attachment.view",
+  "attachment.upload",
+  "attachment.delete_own",
+  "attachment.manage",
+];
+
+const COLLAB_MEMBER: PermissionKey[] = [
+  "checklist.manage",
+  "tag.view",
+  "tag.create",
+  "tag.update",
+  "task.tag.manage",
+  "custom_field.view",
+  "custom_field.value.update",
+  "comment.view",
+  "comment.create",
+  "comment.update_own",
+  "comment.delete_own",
+  "attachment.view",
+  "attachment.upload",
+  "attachment.delete_own",
+];
+
 // Mirrors backend ROLE_PERMISSION_MAP (backend/src/modules/auth/permissions.ts).
 export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
   owner: [
@@ -24,6 +62,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "projects:delete",
     "dashboard:read",
     "activity:read",
+    ...COLLAB_FULL,
   ],
   admin: [
     "workspace:read",
@@ -46,6 +85,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "projects:delete",
     "dashboard:read",
     "activity:read",
+    ...COLLAB_FULL,
   ],
   manager: [
     "workspace:read",
@@ -63,6 +103,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "tasks:delete",
     "dashboard:read",
     "activity:read",
+    ...COLLAB_FULL,
   ],
   member: [
     "workspace:read",
@@ -76,6 +117,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "tasks:delete",
     "dashboard:read",
     "activity:read",
+    ...COLLAB_MEMBER,
   ],
 };
 

@@ -1,12 +1,16 @@
+import http from "node:http";
 import { createApp } from "./app.js";
 import { disconnectPrisma } from "./config/database.js";
 import { loadEnv } from "./config/env.js";
 import { logger } from "./config/logger.js";
+import { attachSocketServer } from "./realtime/socket-hub.js";
 
 const env = loadEnv();
 const app = createApp();
+const server = http.createServer(app);
+attachSocketServer(server);
 
-const server = app.listen(env.PORT, () => {
+server.listen(env.PORT, () => {
   logger.info(`Backend listening on http://localhost:${env.PORT}`);
 });
 

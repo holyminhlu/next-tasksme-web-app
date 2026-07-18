@@ -32,6 +32,7 @@ export type TaskFilterInput = {
   from?: string;
   to?: string;
   selectedIds?: string[];
+  tagIds?: string[];
 };
 
 export function resolveTaskTimezone(
@@ -78,6 +79,16 @@ export function buildTaskListWhere(
     ...(query.createdById ? { createdById: query.createdById } : {}),
     ...(query.unassigned ? { assigneeId: null } : {}),
     ...(query.selectedIds?.length ? { id: { in: query.selectedIds } } : {}),
+    ...(query.tagIds?.length
+      ? {
+          taskTags: {
+            some: {
+              tagId: { in: query.tagIds },
+              tag: { workspaceId },
+            },
+          },
+        }
+      : {}),
   };
 
   if (query.search) {

@@ -141,6 +141,7 @@ function countMoreFilters(
   if (state.sortOrder !== DEFAULT_TASK_FILTER_STATE.sortOrder) count += 1;
   if (state.includeArchived) count += 1;
   if (canIncludeDeleted && state.includeDeleted) count += 1;
+  if (state.tagIds.length) count += 1;
   return count;
 }
 
@@ -149,6 +150,7 @@ export function TaskFilterBar({
   onChange,
   projects,
   members,
+  tags = [],
   canPickProject,
   canFilterMembers,
   canIncludeDeleted,
@@ -159,6 +161,7 @@ export function TaskFilterBar({
   onChange: (patch: Partial<TaskFilterState>) => void;
   projects: CandidateOption[];
   members: CandidateOption[];
+  tags?: Array<{ id: string; name: string; color?: string }>;
   canPickProject: boolean;
   canFilterMembers: boolean;
   canIncludeDeleted: boolean;
@@ -441,6 +444,31 @@ export function TaskFilterBar({
             role="region"
             aria-label="Additional filters"
           >
+            {tags.length > 0 && (
+              <div className={styles.filterField}>
+                <label className={styles.filterLabel} htmlFor="task-tag">
+                  Tag
+                </label>
+                <Select
+                  id="task-tag"
+                  value={state.tagIds[0] ?? ""}
+                  onChange={(event) =>
+                    onChange({
+                      tagIds: event.target.value ? [event.target.value] : [],
+                      page: 1,
+                    })
+                  }
+                >
+                  <option value="">Any tag</option>
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+
             {canFilterMembers && (
               <>
                 <div className={styles.filterField}>

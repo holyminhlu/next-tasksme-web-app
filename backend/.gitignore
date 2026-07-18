@@ -9,3 +9,6 @@ coverage
 dist
 /generated/prisma
 *.log
+
+# Local attachment storage (STORAGE_DRIVER=local)
+.data/

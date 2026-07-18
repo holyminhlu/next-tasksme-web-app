@@ -49,6 +49,14 @@ beforeEach(async () => {
   await prisma.activityEvent.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.notificationPreference.deleteMany();
+  await prisma.commentMention.deleteMany();
+  await prisma.comment.deleteMany();
+  await prisma.attachment.deleteMany();
+  await prisma.taskCustomFieldValue.deleteMany();
+  await prisma.customFieldDefinition.deleteMany();
+  await prisma.taskTag.deleteMany();
+  await prisma.tag.deleteMany();
+  await prisma.checklistItem.deleteMany();
   await prisma.savedView.deleteMany();
   await prisma.task.deleteMany();
   await prisma.workspaceTaskCounter.deleteMany();

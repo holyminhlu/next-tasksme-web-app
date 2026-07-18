@@ -32,6 +32,7 @@ import {
   saveVisibleColumns,
   type TaskColumnKey,
 } from "@/modules/tasks/components/TaskFilterBar";
+import * as collaborationService from "@/modules/tasks/collaboration.service";
 import { TaskBulkActionBar } from "@/modules/tasks/components/TaskBulkActionBar";
 import { TaskBoardView } from "@/modules/tasks/components/TaskBoardView";
 import { TaskCalendarView } from "@/modules/tasks/components/TaskCalendarView";
@@ -47,6 +48,7 @@ import {
   TaskDetailDialog,
   TaskQuickComplete,
   TaskStatusMenu,
+  canMutateTask,
   describeDueDate,
   formatAbsoluteDate,
   formatTaskNumber,
@@ -88,6 +90,7 @@ function MyTasksContent() {
     selectedWorkspace?.roleKey === "owner" ||
     selectedWorkspace?.roleKey === "admin";
   const canRestore = canIncludeDeleted;
+  const canViewTags = hasPermission(permissions, "tag.view");
 
   const timezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -119,6 +122,9 @@ function MyTasksContent() {
   );
   const [projects, setProjects] = useState<CandidateOption[]>([]);
   const [members, setMembers] = useState<CandidateOption[]>([]);
+  const [tags, setTags] = useState<Array<{ id: string; name: string; color?: string }>>(
+    [],
+  );
   const [exportOpen, setExportOpen] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
@@ -239,10 +245,24 @@ function MyTasksContent() {
       });
     }
 
+    if (canViewTags) {
+      void collaborationService.listTags(workspaceId).then((result) => {
+        if (!cancelled && result.ok) {
+          setTags(
+            result.data.map((tag) => ({
+              id: tag.id,
+              name: tag.name,
+              color: tag.color,
+            })),
+          );
+        }
+      });
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, canPickProject, canFilterMembers]);
+  }, [workspaceId, canPickProject, canFilterMembers, canViewTags]);
 
   const locale =
     typeof navigator !== "undefined" ? navigator.language : undefined;
@@ -491,6 +511,7 @@ function MyTasksContent() {
             onChange={setFilterPatch}
             projects={projects}
             members={members}
+            tags={tags}
             canPickProject={canPickProject}
             canFilterMembers={canFilterMembers}
             canIncludeDeleted={canIncludeDeleted}
@@ -880,7 +901,17 @@ function MyTasksContent() {
         onClose={closeTaskDetail}
         onUpdated={applyUpdate}
         onDeleted={applyDelete}
-        canUpdate={canUpdate}
+        canUpdate={
+          canUpdate &&
+          Boolean(
+            selectedTask &&
+              canMutateTask(
+                selectedWorkspace?.roleKey,
+                profile?.id,
+                selectedTask,
+              ),
+          )
+        }
       />
 
       {workspaceId && (

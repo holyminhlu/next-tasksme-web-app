@@ -65,6 +65,7 @@ const sharedTaskFilterFields = {
   /** @deprecated Prefer includeDeleted — when true, means "include deleted". */
   deleted: booleanQuerySchema.optional(),
   timezone: timezoneSchema.optional(),
+  tagIds: multiValue(z.string().uuid()),
 };
 
 function normalizeSharedFilters<T extends Record<string, unknown>>(query: T) {

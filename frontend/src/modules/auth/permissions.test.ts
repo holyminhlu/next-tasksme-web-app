@@ -51,6 +51,23 @@ describe("permissions", () => {
     );
   });
 
+  it("grants collaboration permissions with member restrictions", () => {
+    expect(hasPermission(permissionsForRole("member"), "comment.create")).toBe(
+      true,
+    );
+    expect(hasPermission(permissionsForRole("member"), "checklist.manage")).toBe(
+      true,
+    );
+    expect(hasPermission(permissionsForRole("member"), "tag.delete")).toBe(false);
+    expect(
+      hasPermission(permissionsForRole("member"), "custom_field.configure"),
+    ).toBe(false);
+    expect(hasPermission(permissionsForRole("manager"), "tag.delete")).toBe(true);
+    expect(
+      hasPermission(permissionsForRole("admin"), "attachment.manage"),
+    ).toBe(true);
+  });
+
   it("requires every permission when given an array", () => {
     const permissions = permissionsForRole("manager");
     expect(
