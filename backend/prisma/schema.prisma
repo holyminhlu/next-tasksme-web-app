@@ -68,6 +68,17 @@ enum TaskPriority {
   URGENT
 }
 
+enum TaskSource {
+  MANUAL
+  AI_QUICK_CAPTURE
+  ONBOARDING
+}
+
+enum ActivityVisibility {
+  WORKSPACE
+  ACTOR_ONLY
+}
+
 model User {
   id                    String     @id @default(uuid()) @db.Uuid
   email                 String     @unique
@@ -91,6 +102,7 @@ model User {
   oneTimeTokens       OneTimeToken[]
   invitationsSent     WorkspaceInvitation[] @relation("InvitationInviter")
   auditLogs           AuditLog[]
+  activityEvents      ActivityEvent[]
   onboardings         WorkspaceOnboarding[]
   lastActiveWorkspace Workspace?            @relation("UserLastActiveWorkspace", fields: [lastActiveWorkspaceId], references: [id], onDelete: SetNull)
 
@@ -124,6 +136,7 @@ model Workspace {
   modules         WorkspaceModule[]
   projects        Project[]
   tasks           Task[]
+  activityEvents  ActivityEvent[]
   lastActiveUsers User[]                @relation("UserLastActiveWorkspace")
 
   @@index([ownerId])
@@ -338,30 +351,62 @@ model Project {
   tasks     Task[]
 
   @@index([workspaceId])
+  @@index([workspaceId, status, deletedAt])
   @@index([createdById])
   @@map("projects")
 }
 
 model Task {
-  id          String       @id @default(uuid()) @db.Uuid
-  workspaceId String       @db.Uuid
-  projectId   String?      @db.Uuid
-  title       String
-  description String?
-  status      TaskStatus   @default(TODO)
-  priority    TaskPriority @default(MEDIUM)
-  dueDate     DateTime?
-  createdById String?      @db.Uuid
-  assigneeId  String?      @db.Uuid
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  deletedAt   DateTime?
+  id            String       @id @default(uuid()) @db.Uuid
+  workspaceId   String       @db.Uuid
+  projectId     String?      @db.Uuid
+  title         String
+  description   String?
+  status        TaskStatus   @default(TODO)
+  priority      TaskPriority @default(MEDIUM)
+  dueDate       DateTime?
+  completedAt   DateTime?
+  isBlocked     Boolean      @default(false)
+  blockedReason String?
+  source        TaskSource   @default(MANUAL)
+  createdById   String?      @db.Uuid
+  assigneeId    String?      @db.Uuid
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
+  @@index([workspaceId, status, dueDate])
+  @@index([workspaceId, status, completedAt])
+  @@index([workspaceId, assigneeId, status, dueDate])
+  @@index([workspaceId, projectId, status])
   @@index([projectId])
   @@index([assigneeId])
   @@map("tasks")
+}
+
+model ActivityEvent {
+  id           String             @id @default(uuid()) @db.Uuid
+  workspaceId  String             @db.Uuid
+  actorId      String?            @db.Uuid
+  action       String
+  resourceType String
+  resourceId   String             @db.Uuid
+  projectId    String?            @db.Uuid
+  summary      String
+  metadata     Json?
+  visibility   ActivityVisibility @default(WORKSPACE)
+  sensitive    Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, projectId, createdAt])
+  @@index([workspaceId, actorId, createdAt])
+  @@map("activity_events")
 }

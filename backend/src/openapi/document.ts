@@ -26,6 +26,19 @@ import {
   updateWorkspaceSchema,
   workspaceIdParamsSchema,
 } from "../modules/workspaces/workspaces.schemas.js";
+import { createProjectSchema } from "../modules/projects/projects.schemas.js";
+import {
+  createTaskSchema,
+  listTasksQuerySchema,
+  parseTaskSchema,
+  taskIdParamsSchema,
+  updateTaskSchema,
+} from "../modules/tasks/tasks.schemas.js";
+import {
+  activityQuerySchema,
+  dashboardQuerySchema,
+  myWorkQuerySchema,
+} from "../modules/dashboard/dashboard.schemas.js";
 
 extendZodWithOpenApi(z);
 
@@ -275,6 +288,151 @@ registry.registerPath({
   responses: { 200: { description: "Invitation accepted" } },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/projects",
+  tags: ["Projects"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+  },
+  responses: { 200: { description: "Project list" } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/projects",
+  tags: ["Projects"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    ...jsonBody(createProjectSchema),
+  },
+  responses: { 201: { description: "Project created" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/tasks",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    query: listTasksQuerySchema,
+  },
+  responses: { 200: { description: "Task list" } },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/tasks",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    ...jsonBody(createTaskSchema),
+  },
+  responses: { 201: { description: "Task created (includes completedAt)" } },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: taskIdParamsSchema,
+    ...jsonBody(updateTaskSchema),
+  },
+  responses: { 200: { description: "Task updated (includes completedAt)" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: taskIdParamsSchema,
+  },
+  responses: {
+    200: { description: "Task detail (includes completedAt)" },
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: taskIdParamsSchema,
+  },
+  responses: {
+    200: { description: "Task soft-deleted" },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/tasks/parse",
+  tags: ["Tasks"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    ...jsonBody(parseTaskSchema),
+  },
+  responses: { 200: { description: "Parsed task draft (no persistence)" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/dashboard/summary",
+  tags: ["Dashboard"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    query: dashboardQuerySchema,
+  },
+  responses: { 200: { description: "Dashboard summary stats" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/dashboard/my-work",
+  tags: ["Dashboard"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    query: myWorkQuerySchema,
+  },
+  responses: { 200: { description: "My work tasks" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/dashboard/charts",
+  tags: ["Dashboard"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    query: dashboardQuerySchema,
+  },
+  responses: { 200: { description: "Dashboard charts" } },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/dashboard/activity",
+  tags: ["Dashboard"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: workspaceIdParamsSchema,
+    query: activityQuerySchema,
+  },
+  responses: { 200: { description: "Activity feed (not audit logs)" } },
+});
+
 registry.registerComponent("securitySchemes", "bearerAuth", {
   type: "http",
   scheme: "bearer",
@@ -288,8 +446,8 @@ export function buildOpenApiDocument() {
     openapi: "3.0.3",
     info: {
       title: "TaskMng SME API",
-      version: "2.0.0",
-      description: "Phase 2 Workspace & Onboarding API",
+      version: "4.0.0",
+      description: "Phase 4 Dashboard, Tasks, Projects & Smart Capture API",
     },
     servers: [{ url: "http://localhost:4000" }],
   });

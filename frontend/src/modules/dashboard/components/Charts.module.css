@@ -1,0 +1,202 @@
+/* Lightweight CSS/SVG charts (no chart library). */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.chartEmpty {
+  color: var(--ds-color-text-muted);
+  font-size: 0.85rem;
+  padding: 18px 0;
+  text-align: center;
+}
+
+/* --- Donut ------------------------------------------------------------- */
+
+.donutWrap {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.donutSvg {
+  flex-shrink: 0;
+}
+
+.donutCenterValue {
+  font-size: 1.35rem;
+  font-weight: 700;
+  fill: var(--ds-color-text);
+}
+
+.donutCenterLabel {
+  font-size: 0.6rem;
+  fill: var(--ds-color-text-muted);
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 140px;
+  flex: 1;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--ds-color-text);
+  border-radius: var(--ds-radius-sm);
+  padding: 2px 4px;
+}
+
+.legendItem[data-link="true"]:hover {
+  background: var(--ds-color-surface-hover);
+}
+
+a.legendItem:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.legendSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legendLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legendValue {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Bars -------------------------------------------------------------- */
+
+.barList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(90px, 150px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  border-radius: var(--ds-radius-sm);
+  padding: 2px 4px;
+}
+
+.barRow[data-link="true"]:hover {
+  background: var(--ds-color-surface-hover);
+}
+
+a.barRow {
+  color: inherit;
+}
+
+a.barRow:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.barLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ds-color-text);
+}
+
+.barTrack {
+  height: 10px;
+  background: var(--ds-color-surface-sunken);
+  border-radius: var(--ds-radius-full);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: var(--ds-radius-full);
+  min-width: 2px;
+  transition: width var(--ds-transition);
+}
+
+.barValue {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-color-text);
+}
+
+/* --- Stacked / paired bars (team workload) ------------------------------ */
+
+.pairedValue {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* --- Line --------------------------------------------------------------- */
+
+.lineWrap {
+  width: 100%;
+}
+
+.lineSvg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.lineStroke {
+  fill: none;
+  stroke: var(--ds-color-primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lineArea {
+  fill: var(--ds-color-primary);
+  opacity: 0.12;
+}
+
+.lineDot {
+  fill: var(--ds-color-primary);
+  stroke: var(--ds-color-surface);
+  stroke-width: 1.5;
+}
+
+.lineGrid {
+  stroke: var(--ds-color-border);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.lineAxisLabel {
+  font-size: 0.62rem;
+  fill: var(--ds-color-text-muted);
+}

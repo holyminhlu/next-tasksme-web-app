@@ -4,6 +4,9 @@ import { optionalAuthenticate } from "../../middleware/optionalAuthenticate.js";
 import { requirePermission } from "../../middleware/requirePermission.js";
 import { tenantContext } from "../../middleware/tenantContext.js";
 import { validateRequest } from "../../middleware/validate.js";
+import { dashboardRouter } from "../dashboard/dashboard.routes.js";
+import { projectsRouter } from "../projects/projects.routes.js";
+import { tasksRouter } from "../tasks/tasks.routes.js";
 import {
   acceptInvitation,
   applyModulePreset,
@@ -203,3 +206,7 @@ workspacesRouter.post(
   requirePermission("projects:create"),
   createFirstProject,
 );
+
+workspacesRouter.use("/:workspaceId/tasks", tasksRouter);
+workspacesRouter.use("/:workspaceId/projects", projectsRouter);
+workspacesRouter.use("/:workspaceId/dashboard", dashboardRouter);

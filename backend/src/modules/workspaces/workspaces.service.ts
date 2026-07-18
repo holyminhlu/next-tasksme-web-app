@@ -16,6 +16,7 @@ import {
 import { hashPassword } from "../../lib/password.js";
 import { generateOpaqueToken, hashToken } from "../../lib/tokens.js";
 import { writeAuditLog } from "../../services/audit.service.js";
+import { recordActivity } from "../../services/activity.service.js";
 import { getEmailService } from "../../services/email/index.js";
 import {
   addHours,
@@ -1168,6 +1169,7 @@ export class WorkspacesService {
             createdById: userId,
             assigneeId: userId,
             status: "TODO",
+            source: "ONBOARDING",
           },
         });
         tasks.push(task);
@@ -1213,6 +1215,39 @@ export class WorkspacesService {
       metadata: { taskCount: result.tasks.length },
       ...getClientMeta(req),
     });
+
+    await recordActivity({
+      workspaceId,
+      actorId: userId,
+      action: "project.created",
+      resourceType: "project",
+      resourceId: result.project.id,
+      projectId: result.project.id,
+      summary: `Created project "${result.project.name}"`,
+      metadata: {
+        name: result.project.name,
+        createdById: userId,
+      },
+    });
+
+    for (const task of result.tasks) {
+      await recordActivity({
+        workspaceId,
+        actorId: userId,
+        action: "task.created",
+        resourceType: "task",
+        resourceId: task.id,
+        projectId: task.projectId,
+        summary: `Created task "${task.title}"`,
+        metadata: {
+          title: task.title,
+          status: task.status,
+          assigneeId: task.assigneeId,
+          createdById: task.createdById,
+          source: task.source,
+        },
+      });
+    }
 
     return result;
   }

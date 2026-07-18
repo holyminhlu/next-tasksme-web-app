@@ -63,6 +63,22 @@ export const PERMISSIONS = [
     key: "tasks:update",
     description: "Update tasks",
   },
+  {
+    key: "tasks:delete",
+    description: "Delete tasks",
+  },
+  {
+    key: "dashboard:read",
+    description: "View workspace dashboard",
+  },
+  {
+    key: "activity:read",
+    description: "View workspace activity stream",
+  },
+  {
+    key: "projects:delete",
+    description: "Delete projects",
+  },
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
@@ -89,6 +105,10 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "tasks:read",
     "tasks:create",
     "tasks:update",
+    "tasks:delete",
+    "dashboard:read",
+    "activity:read",
+    "projects:delete",
   ],
   manager: [
     "workspace:read",
@@ -102,6 +122,9 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "tasks:read",
     "tasks:create",
     "tasks:update",
+    "tasks:delete",
+    "dashboard:read",
+    "activity:read",
   ],
   member: [
     "workspace:read",
@@ -111,6 +134,9 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "tasks:read",
     "tasks:create",
     "tasks:update",
+    "tasks:delete",
+    "dashboard:read",
+    "activity:read",
   ],
 };
 
