@@ -11,9 +11,14 @@ import {
   changeStatus,
   createTask,
   deleteTask,
+  exportTasks,
   getTaskActivity,
   getTask,
+  listBoardColumn,
+  listCalendar,
   listTasks,
+  listTimeline,
+  moveTask,
   parseTask,
   restoreTask,
   unarchiveTask,
@@ -21,15 +26,20 @@ import {
 } from "./tasks.controller.js";
 import {
   assigneeMutationSchema,
+  boardTasksQuerySchema,
   bulkDeleteSchema,
   bulkUpdateSchema,
+  calendarTasksQuerySchema,
   createTaskSchema,
   deleteTaskQuerySchema,
+  exportTasksSchema,
   listTasksQuerySchema,
+  moveTaskSchema,
   parseTaskSchema,
   statusMutationSchema,
   taskActivityQuerySchema,
   taskIdParamsSchema,
+  timelineTasksQuerySchema,
   updateTaskSchema,
   versionMutationSchema,
   workspaceIdParamsSchema,
@@ -48,6 +58,50 @@ tasksRouter.get(
   tenantContext,
   requirePermission("tasks:read"),
   listTasks,
+);
+
+tasksRouter.get(
+  "/board",
+  validateRequest({
+    params: workspaceIdParamsSchema,
+    query: boardTasksQuerySchema,
+  }),
+  tenantContext,
+  requirePermission("tasks:read"),
+  listBoardColumn,
+);
+
+tasksRouter.get(
+  "/calendar",
+  validateRequest({
+    params: workspaceIdParamsSchema,
+    query: calendarTasksQuerySchema,
+  }),
+  tenantContext,
+  requirePermission("tasks:read"),
+  listCalendar,
+);
+
+tasksRouter.get(
+  "/timeline",
+  validateRequest({
+    params: workspaceIdParamsSchema,
+    query: timelineTasksQuerySchema,
+  }),
+  tenantContext,
+  requirePermission("tasks:read"),
+  listTimeline,
+);
+
+tasksRouter.post(
+  "/export",
+  validateRequest({
+    params: workspaceIdParamsSchema,
+    body: exportTasksSchema,
+  }),
+  tenantContext,
+  requirePermission("tasks:read"),
+  exportTasks,
 );
 
 tasksRouter.post(
@@ -115,6 +169,14 @@ tasksRouter.patch(
   tenantContext,
   requirePermission("tasks:update"),
   changeStatus,
+);
+
+tasksRouter.patch(
+  "/:taskId/move",
+  validateRequest({ params: taskIdParamsSchema, body: moveTaskSchema }),
+  tenantContext,
+  requirePermission("tasks:update"),
+  moveTask,
 );
 
 tasksRouter.patch(

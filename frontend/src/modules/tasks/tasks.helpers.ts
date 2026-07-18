@@ -10,12 +10,21 @@ import {
 import type {
   BulkItemResult,
   BulkMutationResult,
+  CalendarMode,
+  CalendarTasksResult,
   CandidateOption,
   DeleteTaskResult,
+  ExportTasksInput,
   ParseTaskResult,
   ProjectMemberSummary,
   ProjectRecord,
   ProjectVisibility,
+  SavedViewDisplayOptionsJson,
+  SavedViewFiltersJson,
+  SavedViewGroupByJson,
+  SavedViewRecord,
+  SavedViewSortJson,
+  SavedViewType,
   SortOrder,
   TaskActivityEvent,
   TaskActivityResult,
@@ -28,6 +37,12 @@ import type {
   TaskRecord,
   TaskSortBy,
   TaskStatus,
+  TaskViewMode,
+  TaskViewUrlState,
+  TimelineGroup,
+  TimelineGroupBy,
+  TimelineTasksResult,
+  TimelineZoom,
 } from "./tasks.types";
 
 /**
@@ -51,6 +66,26 @@ export function canAssignToOtherMembers(
   roleKey: string | null | undefined,
 ): boolean {
   return hasWorkspaceTaskScope(roleKey);
+}
+
+/**
+ * Mirrors backend assertCanMutateTask: workspace-scope roles may mutate any
+ * visible task; members may only mutate tasks they created or are assigned to.
+ */
+export function canMutateTask(
+  roleKey: string | null | undefined,
+  userId: string | null | undefined,
+  task: Pick<TaskRecord, "assigneeId" | "createdById">,
+): boolean {
+  if (hasWorkspaceTaskScope(roleKey)) {
+    return true;
+  }
+
+  if (!userId) {
+    return false;
+  }
+
+  return task.assigneeId === userId || task.createdById === userId;
 }
 
 export function initialsFromName(name: string): string {
@@ -197,6 +232,7 @@ export const TASK_SORT_FIELDS: TaskSortBy[] = [
   "dueDate",
   "createdAt",
   "updatedAt",
+  "rank",
 ];
 
 export const TASK_SORT_LABELS: Record<TaskSortBy, string> = {
@@ -208,6 +244,28 @@ export const TASK_SORT_LABELS: Record<TaskSortBy, string> = {
   dueDate: "Deadline",
   createdAt: "Created",
   updatedAt: "Updated",
+  rank: "Board order",
+};
+
+export const TASK_VIEW_MODES: TaskViewMode[] = [
+  "list",
+  "board",
+  "calendar",
+  "timeline",
+];
+
+export const TASK_VIEW_MODE_LABELS: Record<TaskViewMode, string> = {
+  list: "List",
+  board: "Board",
+  calendar: "Calendar",
+  timeline: "Timeline",
+};
+
+export const DEFAULT_TASK_VIEW_URL_STATE: TaskViewUrlState = {
+  view: "list",
+  calMode: "month",
+  tlZoom: "week",
+  groupBy: "project",
 };
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
@@ -397,6 +455,7 @@ export function mapTask(raw: unknown): TaskRecord | null {
     createdByName:
       pick(record, ["createdByName", "creatorName"], asNonEmptyString) ??
       mapPersonName(creator),
+    rank: pick(record, ["rank"], asNonEmptyString),
     version: pick(record, ["version"], asNumber) ?? 1,
     archivedAt: pick(record, ["archivedAt"], asNonEmptyString),
     deletedAt: pick(record, ["deletedAt"], asNonEmptyString),
@@ -950,6 +1009,613 @@ export function serializeTaskFilterState(
   }
 
   return next;
+}
+
+export function normalizeTaskViewMode(value: unknown): TaskViewMode | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  return (TASK_VIEW_MODES as string[]).includes(value)
+    ? (value as TaskViewMode)
+    : null;
+}
+
+export function normalizeCalendarMode(value: unknown): CalendarMode | null {
+  return value === "month" || value === "week" ? value : null;
+}
+
+export function normalizeTimelineZoom(value: unknown): TimelineZoom | null {
+  return value === "day" || value === "week" || value === "month" ? value : null;
+}
+
+export function normalizeTimelineGroupBy(
+  value: unknown,
+): TimelineGroupBy | null {
+  return value === "project" || value === "assignee" ? value : null;
+}
+
+/** Parses My Tasks view URL params (view / calMode / tlZoom / groupBy). */
+export function parseTaskViewUrlState(
+  params: URLSearchParams,
+): TaskViewUrlState {
+  return {
+    view: normalizeTaskViewMode(params.get("view")) ?? "list",
+    calMode: normalizeCalendarMode(params.get("calMode")) ?? "month",
+    tlZoom: normalizeTimelineZoom(params.get("tlZoom")) ?? "week",
+    groupBy: normalizeTimelineGroupBy(params.get("groupBy")) ?? "project",
+  };
+}
+
+/**
+ * Serializes view display state into URL search params. Only non-default
+ * values are written so list view URLs stay short.
+ */
+export function serializeTaskViewUrlState(
+  state: Partial<TaskViewUrlState>,
+  current?: URLSearchParams,
+): URLSearchParams {
+  const next = new URLSearchParams(current?.toString() ?? "");
+
+  const setOrDelete = (key: string, value: string | null | undefined) => {
+    if (value === null || value === undefined || value === "") {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+  };
+
+  if ("view" in state) {
+    setOrDelete(
+      "view",
+      state.view && state.view !== "list" ? state.view : null,
+    );
+  }
+
+  if ("calMode" in state) {
+    setOrDelete(
+      "calMode",
+      state.calMode && state.calMode !== "month" ? state.calMode : null,
+    );
+  }
+
+  if ("tlZoom" in state) {
+    setOrDelete(
+      "tlZoom",
+      state.tlZoom && state.tlZoom !== "week" ? state.tlZoom : null,
+    );
+  }
+
+  if ("groupBy" in state) {
+    setOrDelete(
+      "groupBy",
+      state.groupBy && state.groupBy !== "project" ? state.groupBy : null,
+    );
+  }
+
+  return next;
+}
+
+/** Merges filter + view URL state into a single query string. */
+export function serializeTaskPageUrlState(
+  filters: Partial<TaskFilterState>,
+  view: Partial<TaskViewUrlState>,
+  current?: URLSearchParams,
+): URLSearchParams {
+  return serializeTaskViewUrlState(
+    view,
+    serializeTaskFilterState(filters, current),
+  );
+}
+
+function normalizeSavedViewType(value: unknown): SavedViewType {
+  if (
+    value === "LIST" ||
+    value === "BOARD" ||
+    value === "CALENDAR" ||
+    value === "TIMELINE"
+  ) {
+    return value;
+  }
+
+  return "LIST";
+}
+
+function asFiltersJson(raw: unknown): SavedViewFiltersJson {
+  const record = asRecord(raw);
+  if (!record) {
+    return {};
+  }
+
+  const statuses = Array.isArray(record.statuses)
+    ? record.statuses
+        .map(normalizeTaskStatus)
+        .filter((status): status is TaskStatus => status !== null)
+    : undefined;
+  const priorities = Array.isArray(record.priorities)
+    ? record.priorities
+        .map(normalizeTaskPriority)
+        .filter((priority): priority is TaskPriority => priority !== null)
+    : undefined;
+
+  return {
+    search: pick(record, ["search"], asNonEmptyString) ?? undefined,
+    projectId: pick(record, ["projectId"], asNonEmptyString) ?? null,
+    statuses,
+    priorities,
+    assigneeId: pick(record, ["assigneeId"], asNonEmptyString) ?? null,
+    createdById: pick(record, ["createdById"], asNonEmptyString) ?? null,
+    due: parseDueParam(
+      typeof record.due === "string" ? record.due : null,
+    ),
+    deadlineFrom: pick(record, ["deadlineFrom"], asNonEmptyString) ?? null,
+    deadlineTo: pick(record, ["deadlineTo"], asNonEmptyString) ?? null,
+    overdue: asBoolean(record.overdue) ?? undefined,
+    unassigned: asBoolean(record.unassigned) ?? undefined,
+    includeArchived: asBoolean(record.includeArchived) ?? undefined,
+    includeDeleted: asBoolean(record.includeDeleted) ?? undefined,
+  };
+}
+
+function asSortJson(raw: unknown): SavedViewSortJson {
+  const record = asRecord(raw);
+  if (!record) {
+    return {};
+  }
+
+  return {
+    sortBy: normalizeTaskSortBy(record.sortBy) ?? undefined,
+    sortOrder: normalizeSortOrder(record.sortOrder) ?? undefined,
+  };
+}
+
+function asGroupByJson(raw: unknown): SavedViewGroupByJson {
+  const record = asRecord(raw);
+  if (!record) {
+    return {};
+  }
+
+  if (record.groupBy === "none") {
+    return { groupBy: "none" };
+  }
+
+  const groupBy = normalizeTimelineGroupBy(record.groupBy);
+  return groupBy ? { groupBy } : {};
+}
+
+function asDisplayOptionsJson(raw: unknown): SavedViewDisplayOptionsJson {
+  const record = asRecord(raw);
+  if (!record) {
+    return {};
+  }
+
+  return {
+    view: normalizeTaskViewMode(record.view) ?? undefined,
+    calMode: normalizeCalendarMode(record.calMode) ?? undefined,
+    tlZoom: normalizeTimelineZoom(record.tlZoom) ?? undefined,
+    dense: asBoolean(record.dense) ?? undefined,
+  };
+}
+
+export function mapSavedView(raw: unknown): SavedViewRecord | null {
+  const record = asRecord(raw);
+  if (!record) {
+    return null;
+  }
+
+  const id = pick(record, ["id"], asNonEmptyString);
+  const workspaceId = pick(record, ["workspaceId"], asNonEmptyString);
+  const ownerUserId = pick(record, ["ownerUserId"], asNonEmptyString);
+  const name = pick(record, ["name"], asNonEmptyString);
+
+  if (!id || !workspaceId || !ownerUserId || !name) {
+    return null;
+  }
+
+  const columnsRaw = record.columnsJson;
+  const columnsJson = Array.isArray(columnsRaw)
+    ? columnsRaw.filter((value): value is string => typeof value === "string")
+    : [];
+
+  return {
+    id,
+    workspaceId,
+    ownerUserId,
+    name,
+    resourceType: pick(record, ["resourceType"], asNonEmptyString) ?? "TASK",
+    viewType: normalizeSavedViewType(record.viewType),
+    visibility: pick(record, ["visibility"], asNonEmptyString) ?? "PRIVATE",
+    filtersJson: asFiltersJson(record.filtersJson),
+    sortJson: asSortJson(record.sortJson),
+    groupByJson: asGroupByJson(record.groupByJson),
+    columnsJson,
+    displayOptionsJson: asDisplayOptionsJson(record.displayOptionsJson),
+    configVersion: pick(record, ["configVersion"], asNumber) ?? 1,
+    isDefault: asBoolean(record.isDefault) ?? false,
+    createdAt: pick(record, ["createdAt"], asNonEmptyString),
+    updatedAt: pick(record, ["updatedAt"], asNonEmptyString),
+  };
+}
+
+export function mapSavedViewList(data: unknown): SavedViewRecord[] {
+  const record = asRecord(data);
+  const rawItems = Array.isArray(data)
+    ? data
+    : (record?.items ?? record?.views ?? record?.data);
+
+  return (Array.isArray(rawItems) ? rawItems : [])
+    .map(mapSavedView)
+    .filter((view): view is SavedViewRecord => view !== null);
+}
+
+export function mapCalendarTasksResult(
+  data: unknown,
+  meta?: unknown,
+): CalendarTasksResult {
+  const list = mapTaskList(data, meta);
+  const metaRecord = asRecord(meta);
+
+  return {
+    items: list.items,
+    total: list.total,
+    unscheduledCount:
+      pick(metaRecord, ["unscheduledCount"], asNumber) ?? 0,
+    timezone: pick(metaRecord, ["timezone"], asNonEmptyString),
+    from: pick(metaRecord, ["from"], asNonEmptyString),
+    to: pick(metaRecord, ["to"], asNonEmptyString),
+  };
+}
+
+function mapTimelineGroup(raw: unknown): TimelineGroup | null {
+  const record = asRecord(raw);
+  if (!record) {
+    return null;
+  }
+
+  const id = pick(record, ["id"], asNonEmptyString);
+  const label = pick(record, ["label", "name"], asNonEmptyString);
+  if (!id || !label) {
+    return null;
+  }
+
+  const items = mapTaskList(record.items ?? record.tasks ?? []).items;
+  return { id, label, items };
+}
+
+export function mapTimelineTasksResult(
+  data: unknown,
+  meta?: unknown,
+): TimelineTasksResult {
+  const record = asRecord(data);
+  const metaRecord = asRecord(meta);
+  const rawGroups = Array.isArray(data)
+    ? data
+    : (record?.groups ?? record?.items ?? record?.data);
+
+  const groups = (Array.isArray(rawGroups) ? rawGroups : [])
+    .map(mapTimelineGroup)
+    .filter((group): group is TimelineGroup => group !== null);
+
+  const pagination =
+    asRecord(metaRecord?.pagination) ?? asRecord(record?.pagination);
+
+  return {
+    groups,
+    total:
+      pick(pagination, ["total"], asNumber) ??
+      pick(metaRecord, ["total"], asNumber) ??
+      groups.reduce((sum, group) => sum + group.items.length, 0),
+    timezone: pick(metaRecord, ["timezone"], asNonEmptyString),
+    from: pick(metaRecord, ["from"], asNonEmptyString),
+    to: pick(metaRecord, ["to"], asNonEmptyString),
+    groupBy:
+      normalizeTimelineGroupBy(metaRecord?.groupBy) ??
+      normalizeTimelineGroupBy(record?.groupBy) ??
+      "project",
+  };
+}
+
+/** Builds filter + view patches from a saved view for URL apply. */
+export function savedViewToPageState(view: SavedViewRecord): {
+  filters: Partial<TaskFilterState>;
+  view: Partial<TaskViewUrlState>;
+} {
+  const filtersJson = view.filtersJson;
+  const display = view.displayOptionsJson;
+  const sort = view.sortJson;
+  const group = view.groupByJson;
+
+  const viewFromType = ((): TaskViewMode | undefined => {
+    switch (view.viewType) {
+      case "BOARD":
+        return "board";
+      case "CALENDAR":
+        return "calendar";
+      case "TIMELINE":
+        return "timeline";
+      default:
+        return "list";
+    }
+  })();
+
+  return {
+    filters: {
+      search: filtersJson.search ?? "",
+      projectId: filtersJson.projectId ?? null,
+      statuses: filtersJson.statuses ?? [],
+      priorities: filtersJson.priorities ?? [],
+      assigneeId: filtersJson.assigneeId ?? null,
+      createdById: filtersJson.createdById ?? null,
+      due: filtersJson.due ?? null,
+      deadlineFrom: filtersJson.deadlineFrom ?? null,
+      deadlineTo: filtersJson.deadlineTo ?? null,
+      overdue: filtersJson.overdue ?? false,
+      unassigned: filtersJson.unassigned ?? false,
+      includeArchived: filtersJson.includeArchived ?? false,
+      includeDeleted: filtersJson.includeDeleted ?? false,
+      sortBy: sort.sortBy ?? "createdAt",
+      sortOrder: sort.sortOrder ?? "desc",
+      page: 1,
+    },
+    view: {
+      view: display.view ?? viewFromType ?? "list",
+      calMode: display.calMode ?? "month",
+      tlZoom: display.tlZoom ?? "week",
+      groupBy:
+        group.groupBy && group.groupBy !== "none" ? group.groupBy : "project",
+    },
+  };
+}
+
+/** Snapshot current page state into a create/update saved-view payload. */
+export function pageStateToSavedViewInput(
+  filters: TaskFilterState,
+  view: TaskViewUrlState,
+  columns: string[] = [],
+): {
+  viewType: SavedViewType;
+  filtersJson: SavedViewFiltersJson;
+  sortJson: SavedViewSortJson;
+  groupByJson: SavedViewGroupByJson;
+  columnsJson: string[];
+  displayOptionsJson: SavedViewDisplayOptionsJson;
+} {
+  const viewTypeMap: Record<TaskViewMode, SavedViewType> = {
+    list: "LIST",
+    board: "BOARD",
+    calendar: "CALENDAR",
+    timeline: "TIMELINE",
+  };
+
+  return {
+    viewType: viewTypeMap[view.view],
+    filtersJson: {
+      search: filters.search || undefined,
+      projectId: filters.projectId,
+      statuses: filters.statuses.length ? filters.statuses : undefined,
+      priorities: filters.priorities.length ? filters.priorities : undefined,
+      assigneeId: filters.assigneeId,
+      createdById: filters.createdById,
+      due: filters.due,
+      deadlineFrom: filters.deadlineFrom,
+      deadlineTo: filters.deadlineTo,
+      overdue: filters.overdue || undefined,
+      unassigned: filters.unassigned || undefined,
+      includeArchived: filters.includeArchived || undefined,
+      includeDeleted: filters.includeDeleted || undefined,
+    },
+    sortJson: {
+      sortBy: filters.sortBy,
+      sortOrder: filters.sortOrder,
+    },
+    groupByJson: {
+      groupBy: view.view === "timeline" ? view.groupBy : "none",
+    },
+    columnsJson: columns,
+    displayOptionsJson: {
+      view: view.view,
+      calMode: view.calMode,
+      tlZoom: view.tlZoom,
+    },
+  };
+}
+
+/**
+ * Given a column sorted by rank asc, compute neighbor ids for a move that
+ * places `activeId` at the position of `overId` (or at the end when null).
+ */
+export function resolveBoardMoveNeighbors(
+  columnItems: readonly TaskRecord[],
+  activeId: string,
+  overId: string | null,
+): { beforeTaskId: string | null; afterTaskId: string | null } {
+  const withoutActive = columnItems.filter((task) => task.id !== activeId);
+  let insertIndex = withoutActive.length;
+
+  if (overId) {
+    const overIndex = withoutActive.findIndex((task) => task.id === overId);
+    if (overIndex >= 0) {
+      insertIndex = overIndex;
+    }
+  }
+
+  const before = withoutActive[insertIndex - 1] ?? null;
+  const after = withoutActive[insertIndex] ?? null;
+
+  return {
+    beforeTaskId: before?.id ?? null,
+    afterTaskId: after?.id ?? null,
+  };
+}
+
+/** Optimistic reorder: move active into target column at over position. */
+export function applyOptimisticBoardMove(
+  columns: Record<TaskStatus, TaskRecord[]>,
+  activeId: string,
+  targetStatus: TaskStatus,
+  overId: string | null,
+): Record<TaskStatus, TaskRecord[]> {
+  let moved: TaskRecord | null = null;
+  const next: Record<TaskStatus, TaskRecord[]> = { ...columns };
+
+  for (const status of TASK_STATUSES) {
+    const index = next[status].findIndex((task) => task.id === activeId);
+    if (index >= 0) {
+      moved = { ...next[status][index]!, status: targetStatus };
+      next[status] = [
+        ...next[status].slice(0, index),
+        ...next[status].slice(index + 1),
+      ];
+      break;
+    }
+  }
+
+  if (!moved) {
+    return columns;
+  }
+
+  const target = [...(next[targetStatus] ?? [])];
+  let insertIndex = target.length;
+  if (overId) {
+    const overIndex = target.findIndex((task) => task.id === overId);
+    if (overIndex >= 0) {
+      insertIndex = overIndex;
+    }
+  }
+  target.splice(insertIndex, 0, moved);
+  next[targetStatus] = target;
+  return next;
+}
+
+/** Inclusive YYYY-MM-DD range for the visible calendar month grid (Sun–Sat). */
+export function calendarMonthRange(
+  anchor: Date,
+): { from: string; to: string; weeks: Date[][] } {
+  const year = anchor.getFullYear();
+  const month = anchor.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const start = new Date(firstOfMonth);
+  start.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+
+  const weeks: Date[][] = [];
+  const cursor = new Date(start);
+  for (let week = 0; week < 6; week += 1) {
+    const days: Date[] = [];
+    for (let day = 0; day < 7; day += 1) {
+      days.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(days);
+  }
+
+  const last = weeks[weeks.length - 1]![6]!;
+  return {
+    from: toLocalDateString(start),
+    to: toLocalDateString(last),
+    weeks,
+  };
+}
+
+/** Inclusive YYYY-MM-DD range for a Sunday-start week containing `anchor`. */
+export function calendarWeekRange(
+  anchor: Date,
+): { from: string; to: string; days: Date[] } {
+  const start = new Date(anchor);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+
+  const days: Date[] = [];
+  for (let i = 0; i < 7; i += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    days.push(day);
+  }
+
+  return {
+    from: toLocalDateString(days[0]!),
+    to: toLocalDateString(days[6]!),
+    days,
+  };
+}
+
+/** Timeline window around `anchor` for the given zoom level. */
+export function timelineRangeForZoom(
+  anchor: Date,
+  zoom: TimelineZoom,
+): { from: string; to: string; days: Date[] } {
+  const start = new Date(anchor);
+  start.setHours(0, 0, 0, 0);
+  let dayCount = 14;
+
+  if (zoom === "day") {
+    start.setDate(start.getDate() - 3);
+    dayCount = 14;
+  } else if (zoom === "week") {
+    start.setDate(start.getDate() - start.getDay() - 7);
+    dayCount = 42;
+  } else {
+    start.setDate(1);
+    start.setMonth(start.getMonth() - 1);
+    dayCount = 92;
+  }
+
+  const days: Date[] = [];
+  for (let i = 0; i < dayCount; i += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    days.push(day);
+  }
+
+  return {
+    from: toLocalDateString(days[0]!),
+    to: toLocalDateString(days[days.length - 1]!),
+    days,
+  };
+}
+
+/**
+ * Whether a task overlaps a calendar day (local YYYY-MM-DD), using start→due
+ * when both exist, otherwise the single available date.
+ */
+export function taskOverlapsDay(
+  task: Pick<TaskRecord, "startAt" | "dueDate">,
+  dayYmd: string,
+): boolean {
+  const startYmd = task.startAt ? toDateInputValue(task.startAt) : null;
+  const dueYmd = task.dueDate ? toDateInputValue(task.dueDate) : null;
+
+  if (!startYmd && !dueYmd) {
+    return false;
+  }
+
+  const from = startYmd ?? dueYmd!;
+  const to = dueYmd ?? startYmd!;
+  return from <= dayYmd && dayYmd <= to;
+}
+
+/** Converts URL filter state into export filter body fields. */
+export function taskFilterStateToExportFilters(
+  state: TaskFilterState,
+): NonNullable<ExportTasksInput["filters"]> {
+  return {
+    search: state.search || undefined,
+    projectId: state.projectId ? [state.projectId] : undefined,
+    status: state.statuses.length ? state.statuses : undefined,
+    priority: state.priorities.length ? state.priorities : undefined,
+    assigneeId: state.assigneeId ?? undefined,
+    createdById: state.createdById ?? undefined,
+    due: state.due ?? undefined,
+    deadlineFrom: state.deadlineFrom
+      ? dateInputToIso(state.deadlineFrom) ?? undefined
+      : undefined,
+    deadlineTo: state.deadlineTo
+      ? dateInputToIso(state.deadlineTo) ?? undefined
+      : undefined,
+    overdue: state.overdue || undefined,
+    unassigned: state.unassigned || undefined,
+    includeArchived: state.includeArchived || undefined,
+    includeDeleted: state.includeDeleted || undefined,
+  };
 }
 
 /** Converts URL filter state into list API filters. */

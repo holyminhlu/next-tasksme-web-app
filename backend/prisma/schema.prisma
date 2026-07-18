@@ -90,6 +90,21 @@ enum NotificationType {
   TASK_ASSIGNED
 }
 
+enum SavedViewResourceType {
+  TASK
+}
+
+enum SavedViewType {
+  LIST
+  BOARD
+  CALENDAR
+  TIMELINE
+}
+
+enum SavedViewVisibility {
+  PRIVATE
+}
+
 model User {
   id                    String     @id @default(uuid()) @db.Uuid
   email                 String     @unique
@@ -121,6 +136,7 @@ model User {
   tasksCompleted      Task[]                   @relation("TaskCompleter")
   notifications       Notification[]
   notificationPrefs   NotificationPreference[]
+  savedViews          SavedView[]
   lastActiveWorkspace Workspace?               @relation("UserLastActiveWorkspace", fields: [lastActiveWorkspaceId], references: [id], onDelete: SetNull)
 
   @@index([status])
@@ -158,6 +174,7 @@ model Workspace {
   taskCounter             WorkspaceTaskCounter?
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
+  savedViews              SavedView[]
   lastActiveUsers         User[]                   @relation("UserLastActiveWorkspace")
 
   @@index([ownerId])
@@ -397,6 +414,7 @@ model Task {
   source        TaskSource   @default(MANUAL)
   createdById   String?      @db.Uuid
   assigneeId    String?      @db.Uuid
+  rank          String       @default("0000000000001000")
   version       Int          @default(1)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -416,11 +434,41 @@ model Task {
   @@index([workspaceId, status, completedAt])
   @@index([workspaceId, assigneeId, status, dueDate])
   @@index([workspaceId, projectId, status])
+  @@index([workspaceId, projectId, status, rank])
+  @@index([workspaceId, startAt])
+  @@index([workspaceId, dueDate])
   @@index([projectId])
   @@index([assigneeId])
   @@index([completedById])
   @@index([workspaceId, archivedAt, deletedAt])
   @@map("tasks")
+}
+
+model SavedView {
+  id                 String               @id @default(uuid()) @db.Uuid
+  workspaceId        String               @db.Uuid
+  ownerUserId        String               @db.Uuid
+  name               String
+  resourceType       SavedViewResourceType @default(TASK)
+  viewType           SavedViewType        @default(LIST)
+  visibility         SavedViewVisibility  @default(PRIVATE)
+  filtersJson        Json                 @default("{}")
+  sortJson           Json                 @default("{}")
+  groupByJson        Json                 @default("{}")
+  columnsJson        Json                 @default("[]")
+  displayOptionsJson Json                 @default("{}")
+  configVersion      Int                  @default(1)
+  isDefault          Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner     User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, ownerUserId, name])
+  @@index([workspaceId, ownerUserId, isDefault])
+  @@index([workspaceId, ownerUserId, viewType])
+  @@map("saved_views")
 }
 
 model ProjectMember {

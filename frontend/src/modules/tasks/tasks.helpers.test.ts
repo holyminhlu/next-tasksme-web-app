@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canAssignToOtherMembers,
   canManagePrivateProjectMembers,
+  canMutateTask,
   dateInputToIso,
   daysUntilDue,
   describeDueDate,
@@ -13,22 +14,31 @@ import {
   isConflictError,
   isTaskOverdue,
   mapBulkMutationResult,
+  mapCalendarTasksResult,
   mapDeleteTaskResult,
   mapParseResult,
   mapProjectList,
   mapProjectMemberList,
+  mapSavedView,
   mapTask,
   mapTaskActivityList,
   mapTaskList,
+  mapTimelineTasksResult,
   normalizeTaskPriority,
   normalizeTaskStatus,
+  pageStateToSavedViewInput,
   parseTaskFilterState,
+  parseTaskViewUrlState,
   pastDueWarning,
   removeFilterChip,
+  resolveBoardMoveNeighbors,
   resolveTaskListViewPreset,
+  savedViewToPageState,
   serializeTaskFilterState,
+  serializeTaskViewUrlState,
   taskFilterStateToListFilters,
   taskListViewPresetToFilterPatch,
+  taskOverlapsDay,
   toDateInputValue,
   toLocalDateString,
   validateTaskDates,
@@ -73,6 +83,7 @@ describe("mapTask", () => {
       blockedReason: "Waiting on legal",
       isBlocked: true,
       source: "MANUAL",
+      rank: "0000000000001000",
     });
 
     expect(task).toMatchObject({
@@ -92,6 +103,7 @@ describe("mapTask", () => {
       blockedReason: "Waiting on legal",
       isBlocked: true,
       source: "MANUAL",
+      rank: "0000000000001000",
     });
   });
 
@@ -570,5 +582,133 @@ describe("assignment / membership helpers", () => {
       includeDeleted: false,
       page: 1,
     });
+  });
+});
+
+describe("Phase 6 view URL + board helpers", () => {
+  it("parses and serializes view URL state with defaults omitted", () => {
+    const parsed = parseTaskViewUrlState(
+      new URLSearchParams("view=board&calMode=week&tlZoom=month&groupBy=assignee"),
+    );
+    expect(parsed).toEqual({
+      view: "board",
+      calMode: "week",
+      tlZoom: "month",
+      groupBy: "assignee",
+    });
+
+    const serialized = serializeTaskViewUrlState(parsed);
+    expect(serialized.get("view")).toBe("board");
+    expect(serialized.get("calMode")).toBe("week");
+    expect(serialized.get("tlZoom")).toBe("month");
+    expect(serialized.get("groupBy")).toBe("assignee");
+
+    const defaults = serializeTaskViewUrlState({
+      view: "list",
+      calMode: "month",
+      tlZoom: "week",
+      groupBy: "project",
+    });
+    expect(defaults.toString()).toBe("");
+  });
+
+  it("gates mutate permission like the backend", () => {
+    expect(
+      canMutateTask("member", "u1", { assigneeId: "u1", createdById: "u9" }),
+    ).toBe(true);
+    expect(
+      canMutateTask("member", "u1", { assigneeId: "u2", createdById: "u9" }),
+    ).toBe(false);
+    expect(
+      canMutateTask("manager", "u1", { assigneeId: "u2", createdById: "u9" }),
+    ).toBe(true);
+  });
+
+  it("resolves board neighbors for a drop", () => {
+    const column = [
+      { id: "a" },
+      { id: "b" },
+      { id: "c" },
+    ] as unknown as import("./tasks.types").TaskRecord[];
+
+    expect(resolveBoardMoveNeighbors(column, "a", "c")).toEqual({
+      beforeTaskId: "b",
+      afterTaskId: "c",
+    });
+    expect(resolveBoardMoveNeighbors(column, "c", null)).toEqual({
+      beforeTaskId: "b",
+      afterTaskId: null,
+    });
+  });
+
+  it("detects multi-day overlap and maps calendar/timeline payloads", () => {
+    expect(
+      taskOverlapsDay(
+        { startAt: "2026-07-18T00:00:00.000Z", dueDate: "2026-07-20T00:00:00.000Z" },
+        "2026-07-19",
+      ),
+    ).toBe(true);
+    expect(
+      taskOverlapsDay(
+        { startAt: null, dueDate: "2026-07-20T00:00:00.000Z" },
+        "2026-07-19",
+      ),
+    ).toBe(false);
+
+    const calendar = mapCalendarTasksResult(
+      { items: [{ id: "t1", title: "A", rank: "1" }] },
+      { unscheduledCount: 3, timezone: "UTC", from: "2026-07-01", to: "2026-07-31" },
+    );
+    expect(calendar.unscheduledCount).toBe(3);
+    expect(calendar.items[0]?.rank).toBe("1");
+
+    const timeline = mapTimelineTasksResult(
+      {
+        groups: [
+          {
+            id: "p1",
+            label: "Ops",
+            items: [{ id: "t1", title: "A" }],
+          },
+        ],
+      },
+      { groupBy: "project", total: 1 },
+    );
+    expect(timeline.groups[0]?.label).toBe("Ops");
+    expect(timeline.groupBy).toBe("project");
+  });
+
+  it("round-trips saved view ↔ page state", () => {
+    const view = mapSavedView({
+      id: "v1",
+      workspaceId: "ws1",
+      ownerUserId: "u1",
+      name: "Board overdue",
+      viewType: "BOARD",
+      filtersJson: { statuses: ["TODO"], overdue: true },
+      sortJson: { sortBy: "dueDate", sortOrder: "asc" },
+      groupByJson: { groupBy: "none" },
+      columnsJson: ["title"],
+      displayOptionsJson: { view: "board", calMode: "week" },
+      isDefault: true,
+    });
+    expect(view?.name).toBe("Board overdue");
+
+    const page = savedViewToPageState(view!);
+    expect(page.view.view).toBe("board");
+    expect(page.filters.overdue).toBe(true);
+    expect(page.filters.sortBy).toBe("dueDate");
+
+    const payload = pageStateToSavedViewInput(
+      {
+        ...parseTaskFilterState(new URLSearchParams("status=TODO&overdue=true")),
+        sortBy: "dueDate",
+        sortOrder: "asc",
+      },
+      { view: "board", calMode: "week", tlZoom: "week", groupBy: "project" },
+      ["title"],
+    );
+    expect(payload.viewType).toBe("BOARD");
+    expect(payload.displayOptionsJson.view).toBe("board");
   });
 });

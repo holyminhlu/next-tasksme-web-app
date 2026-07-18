@@ -63,9 +63,12 @@ const EMPTY: CreateFields = {
 export function CreateTaskForm({
   onCreated,
   onClose,
+  initialDueDate,
 }: {
   onCreated?: (task: TaskRecord) => void;
   onClose: () => void;
+  /** YYYY-MM-DD prefill from calendar day click. */
+  initialDueDate?: string | null;
 }) {
   const { selectedWorkspace, profile, permissions } = useAuth();
   const { toast } = useToast();
@@ -74,6 +77,7 @@ export function CreateTaskForm({
   const [fields, setFields] = useState<CreateFields>({
     ...EMPTY,
     assigneeId: profile?.id ?? "",
+    dueDate: initialDueDate ?? "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

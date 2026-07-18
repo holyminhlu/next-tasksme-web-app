@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { hasPermission, useAuth } from "@/modules/auth";
 import {
   Button,
+  Dialog,
+  FormField,
   Select,
   useToast,
 } from "@/modules/design-system";
@@ -70,6 +72,9 @@ export function TaskBulkActionBar({
   const [projectId, setProjectId] = useState("");
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  // Component mounts only while a selection exists, so the dialog opens as
+  // soon as the first task is ticked and can be reopened from the bar.
+  const [dialogOpen, setDialogOpen] = useState(true);
 
   const showFullAssigneePicker = canAssign && canAssignOthers;
   const showSelfAssign = canAssign && !canAssignOthers && Boolean(profile);
@@ -226,175 +231,233 @@ export function TaskBulkActionBar({
   }
 
   return (
-    <div className={styles.bar} role="region" aria-label="Bulk task actions">
-      <p className={styles.count}>
-        {selectedTasks.length} selected
-      </p>
-
-      {canUpdate && (
-        <>
-          <Select
-            aria-label="Bulk status"
-            value={status}
-            disabled={busy}
-            onChange={(event) => setStatus(event.target.value as TaskStatus | "")}
-          >
-            <option value="">Set status…</option>
-            {TASK_STATUSES.map((key) => (
-              <option key={key} value={key}>
-                {TASK_STATUS_LABELS[key]}
-              </option>
-            ))}
-          </Select>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy || !status}
-            loading={busy}
-            onClick={() =>
-              status ? void runBulkUpdate({ status }) : undefined
-            }
-          >
-            Apply status
-          </Button>
-
-          <Select
-            aria-label="Bulk priority"
-            value={priority}
-            disabled={busy}
-            onChange={(event) =>
-              setPriority(event.target.value as TaskPriority | "")
-            }
-          >
-            <option value="">Set priority…</option>
-            {TASK_PRIORITIES.map((key) => (
-              <option key={key} value={key}>
-                {TASK_PRIORITY_LABELS[key]}
-              </option>
-            ))}
-          </Select>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy || !priority}
-            onClick={() =>
-              priority ? void runBulkUpdate({ priority }) : undefined
-            }
-          >
-            Apply priority
-          </Button>
-        </>
-      )}
-
-      {showFullAssigneePicker && privateProjectIds.size <= 1 && (
-        <div className={styles.assigneeWrap}>
-          <AssigneePicker
-            label="Bulk assignee"
-            value={assigneeId}
-            onChange={setAssigneeId}
-            options={bulkAssigneeOptions}
-            disabled={busy}
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy}
-            onClick={() =>
-              void runBulkUpdate({
-                assigneeId: assigneeId || null,
-              })
-            }
-          >
-            Apply assignee
-          </Button>
-        </div>
-      )}
-
-      {showSelfAssign && profile && (
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={busy}
-          onClick={() => void runBulkUpdate({ assigneeId: profile.id })}
-        >
-          Assign to me
+    <>
+      <div className={styles.bar} role="region" aria-label="Bulk task actions">
+        <p className={styles.count}>{selectedTasks.length} selected</p>
+        <Button size="sm" disabled={busy} onClick={() => setDialogOpen(true)}>
+          Bulk actions…
         </Button>
-      )}
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onClear}>
+          Clear selection
+        </Button>
+        {summary && (
+          <p className={styles.summary} role="status">
+            {summary}
+          </p>
+        )}
+      </div>
 
-      {canPickProject && (
-        <>
-          <Select
-            aria-label="Bulk project"
-            value={projectId}
-            disabled={busy}
-            onChange={(event) => setProjectId(event.target.value)}
-          >
-            <option value="">Set project…</option>
-            <option value="__none__">No project</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </Select>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy || !projectId}
-            onClick={() =>
-              projectId
-                ? void runBulkUpdate({
-                    projectId: projectId === "__none__" ? null : projectId,
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        title="Bulk actions"
+        description={`${selectedTasks.length} task${selectedTasks.length === 1 ? "" : "s"} selected`}
+        footer={
+          <div className={styles.dialogFooter}>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setDialogOpen(false);
+                onClear();
+              }}
+            >
+              Clear selection
+            </Button>
+            <Button variant="secondary" onClick={() => setDialogOpen(false)}>
+              Close
+            </Button>
+          </div>
+        }
+      >
+        <div className={styles.form}>
+          {canUpdate && (
+            <div className={styles.formRow}>
+              <FormField label="Status">
+                {(fieldProps) => (
+                  <Select
+                    {...fieldProps}
+                    value={status}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setStatus(event.target.value as TaskStatus | "")
+                    }
+                  >
+                    <option value="">Set status…</option>
+                    {TASK_STATUSES.map((key) => (
+                      <option key={key} value={key}>
+                        {TASK_STATUS_LABELS[key]}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </FormField>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy || !status}
+                loading={busy}
+                onClick={() =>
+                  status ? void runBulkUpdate({ status }) : undefined
+                }
+              >
+                Apply status
+              </Button>
+            </div>
+          )}
+
+          {canUpdate && (
+            <div className={styles.formRow}>
+              <FormField label="Priority">
+                {(fieldProps) => (
+                  <Select
+                    {...fieldProps}
+                    value={priority}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setPriority(event.target.value as TaskPriority | "")
+                    }
+                  >
+                    <option value="">Set priority…</option>
+                    {TASK_PRIORITIES.map((key) => (
+                      <option key={key} value={key}>
+                        {TASK_PRIORITY_LABELS[key]}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </FormField>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy || !priority}
+                onClick={() =>
+                  priority ? void runBulkUpdate({ priority }) : undefined
+                }
+              >
+                Apply priority
+              </Button>
+            </div>
+          )}
+
+          {showFullAssigneePicker && privateProjectIds.size <= 1 && (
+            <div className={styles.formRow}>
+              <div className={styles.assigneeWrap}>
+                <AssigneePicker
+                  label="Assignee"
+                  value={assigneeId}
+                  onChange={setAssigneeId}
+                  options={bulkAssigneeOptions}
+                  disabled={busy}
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  void runBulkUpdate({
+                    assigneeId: assigneeId || null,
                   })
-                : undefined
-            }
-          >
-            Apply project
-          </Button>
-        </>
-      )}
+                }
+              >
+                Apply assignee
+              </Button>
+            </div>
+          )}
 
-      {canUpdate && (
-        <>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy}
-            onClick={() => void runBulkUpdate({ archived: true })}
-          >
-            Archive
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={busy}
-            onClick={() => void runBulkUpdate({ archived: false })}
-          >
-            Unarchive
-          </Button>
-        </>
-      )}
+          {showSelfAssign && profile && (
+            <div className={styles.formRow}>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void runBulkUpdate({ assigneeId: profile.id })}
+              >
+                Assign to me
+              </Button>
+            </div>
+          )}
 
-      {canDelete && (
-        <Button
-          size="sm"
-          variant="dangerOutline"
-          disabled={busy}
-          onClick={() => void runBulkDelete()}
-        >
-          Delete
-        </Button>
-      )}
+          {canPickProject && (
+            <div className={styles.formRow}>
+              <FormField label="Project">
+                {(fieldProps) => (
+                  <Select
+                    {...fieldProps}
+                    value={projectId}
+                    disabled={busy}
+                    onChange={(event) => setProjectId(event.target.value)}
+                  >
+                    <option value="">Set project…</option>
+                    <option value="__none__">No project</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </FormField>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy || !projectId}
+                onClick={() =>
+                  projectId
+                    ? void runBulkUpdate({
+                        projectId: projectId === "__none__" ? null : projectId,
+                      })
+                    : undefined
+                }
+              >
+                Apply project
+              </Button>
+            </div>
+          )}
 
-      <Button size="sm" variant="ghost" disabled={busy} onClick={onClear}>
-        Clear selection
-      </Button>
+          {(canUpdate || canDelete) && (
+            <div className={styles.formActions}>
+              {canUpdate && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => void runBulkUpdate({ archived: true })}
+                  >
+                    Archive
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => void runBulkUpdate({ archived: false })}
+                  >
+                    Unarchive
+                  </Button>
+                </>
+              )}
+              {canDelete && (
+                <Button
+                  size="sm"
+                  variant="dangerOutline"
+                  disabled={busy}
+                  onClick={() => void runBulkDelete()}
+                >
+                  Delete
+                </Button>
+              )}
+            </div>
+          )}
 
-      {summary && (
-        <p className={styles.summary} role="status">
-          {summary}
-        </p>
-      )}
-    </div>
+          {summary && (
+            <p className={styles.summary} role="status">
+              {summary}
+            </p>
+          )}
+        </div>
+      </Dialog>
+    </>
   );
 }

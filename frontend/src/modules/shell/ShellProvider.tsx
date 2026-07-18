@@ -29,6 +29,11 @@ import { findRouteByPath, type NavContext } from "./navigation";
 
 export type QuickCreateKind = "task" | "project" | "invite";
 
+export type QuickCreateOptions = {
+  /** YYYY-MM-DD due date prefill for task create. */
+  initialDueDate?: string;
+};
+
 type PrefsState = {
   workspaceId: string | null;
   prefs: ShellPreferences;
@@ -63,7 +68,11 @@ type ShellContextValue = {
 
   /** Quick create dialogs. */
   quickCreate: QuickCreateKind | null;
-  setQuickCreate: (kind: QuickCreateKind | null) => void;
+  quickCreateOptions: QuickCreateOptions | null;
+  setQuickCreate: (
+    kind: QuickCreateKind | null,
+    options?: QuickCreateOptions | null,
+  ) => void;
 
   /** Backend workspace notifications. */
   notifications: WorkspaceNotification[];
@@ -97,7 +106,11 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [quickCreate, setQuickCreate] = useState<QuickCreateKind | null>(null);
+  const [quickCreate, setQuickCreateState] = useState<QuickCreateKind | null>(
+    null,
+  );
+  const [quickCreateOptions, setQuickCreateOptions] =
+    useState<QuickCreateOptions | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>(
@@ -397,6 +410,14 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     [selectedWorkspace?.type, permissions, enabledModuleKeys],
   );
 
+  const setQuickCreate = useCallback(
+    (kind: QuickCreateKind | null, options?: QuickCreateOptions | null) => {
+      setQuickCreateState(kind);
+      setQuickCreateOptions(kind ? (options ?? null) : null);
+    },
+    [],
+  );
+
   const value = useMemo<ShellContextValue>(
     () => ({
       preferences: prefs,
@@ -429,6 +450,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       commandPaletteOpen,
       setCommandPaletteOpen,
       quickCreate,
+      quickCreateOptions,
       setQuickCreate,
       notifications,
       notificationsLoading,
@@ -450,6 +472,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       refreshModules,
       commandPaletteOpen,
       quickCreate,
+      quickCreateOptions,
+      setQuickCreate,
       notifications,
       notificationsLoading,
       notificationsError,

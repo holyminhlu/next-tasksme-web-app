@@ -6,9 +6,11 @@ vi.mock("@/lib/api/client", () => ({
   patch: vi.fn(),
   put: vi.fn(),
   del: vi.fn(),
+  postBlob: vi.fn(),
+  downloadBlob: vi.fn(),
 }));
 
-import { del, get, patch, post, put } from "@/lib/api/client";
+import { del, downloadBlob, get, patch, post, postBlob, put } from "@/lib/api/client";
 import * as tasksService from "./tasks.service";
 
 const WS = "ws-1";
@@ -45,6 +47,8 @@ beforeEach(() => {
   vi.mocked(patch).mockReset();
   vi.mocked(put).mockReset();
   vi.mocked(del).mockReset();
+  vi.mocked(postBlob).mockReset();
+  vi.mocked(downloadBlob).mockReset();
 });
 
 describe("listTasks", () => {
@@ -466,5 +470,200 @@ describe("parseTask / projects", () => {
       expect(result.data[0]?.id).toBe("u1");
       expect(result.data[0]?.name).toContain("Ann");
     }
+  });
+});
+
+describe("Phase 6 board / calendar / timeline / move / export / saved views", () => {
+  it("lists a board column sorted by rank", async () => {
+    vi.mocked(get).mockResolvedValue(ok({ items: [task({ rank: "1000" })], total: 1 }));
+
+    const result = await tasksService.listBoardColumn(WS, {
+      status: "TODO",
+      sortBy: "rank",
+      sortOrder: "asc",
+    });
+
+    expect(get).toHaveBeenCalledWith(
+      expect.stringMatching(
+        new RegExp(`^/workspaces/${WS}/tasks/board\\?`),
+      ),
+    );
+    const url = vi.mocked(get).mock.calls[0][0];
+    expect(url).toContain("status=TODO");
+    expect(url).toContain("sortBy=rank");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.items[0]?.rank).toBe("1000");
+    }
+  });
+
+  it("lists calendar and timeline ranges", async () => {
+    vi.mocked(get).mockResolvedValueOnce(
+      ok({ items: [task()] }, { unscheduledCount: 2, timezone: "UTC" }),
+    );
+    const calendar = await tasksService.listCalendar(WS, {
+      from: "2026-07-01",
+      to: "2026-07-31",
+      timezone: "UTC",
+    });
+    expect(vi.mocked(get).mock.calls[0][0]).toContain("/tasks/calendar?");
+    expect(calendar.ok).toBe(true);
+    if (calendar.ok) {
+      expect(calendar.data.unscheduledCount).toBe(2);
+    }
+
+    vi.mocked(get).mockResolvedValueOnce(
+      ok(
+        { groups: [{ id: "p1", label: "Ops", items: [task()] }] },
+        { groupBy: "project" },
+      ),
+    );
+    const timeline = await tasksService.listTimeline(WS, {
+      from: "2026-07-01",
+      to: "2026-07-31",
+      groupBy: "project",
+      timezone: "UTC",
+    });
+    expect(vi.mocked(get).mock.calls[1][0]).toContain("/tasks/timeline?");
+    expect(timeline.ok).toBe(true);
+  });
+
+  it("moves a task with neighbors and surfaces conflicts", async () => {
+    vi.mocked(patch).mockResolvedValueOnce(
+      ok(task({ status: "IN_PROGRESS", version: 2, rank: "1500" })),
+    );
+
+    const moved = await tasksService.moveTask(WS, "t1", {
+      targetStatus: "IN_PROGRESS",
+      beforeTaskId: "a",
+      afterTaskId: "b",
+      version: 1,
+    });
+    expect(patch).toHaveBeenCalledWith(`/workspaces/${WS}/tasks/t1/move`, {
+      targetStatus: "IN_PROGRESS",
+      beforeTaskId: "a",
+      afterTaskId: "b",
+      version: 1,
+    });
+    expect(moved.ok).toBe(true);
+
+    vi.mocked(patch).mockResolvedValueOnce(
+      fail("CONFLICT", "Task version is stale"),
+    );
+    const conflict = await tasksService.moveTask(WS, "t1", {
+      targetStatus: "TODO",
+      version: 1,
+    });
+    expect(conflict).toEqual({
+      ok: false,
+      code: "CONFLICT",
+      message: "Task version is stale",
+    });
+  });
+
+  it("exports via postBlob and downloads the file", async () => {
+    const headers = new Headers({
+      "Content-Type": "text/csv",
+      "Content-Disposition": 'attachment; filename="tasks.csv"',
+      "X-Export-Row-Count": "12",
+    });
+    vi.mocked(postBlob).mockResolvedValue({
+      ok: true,
+      blob: new Blob(["a,b"]),
+      filename: "tasks.csv",
+      contentType: "text/csv",
+      headers,
+    });
+
+    const result = await tasksService.downloadExportedTasks(WS, {
+      format: "csv",
+      scope: "filters",
+    });
+
+    expect(postBlob).toHaveBeenCalledWith(`/workspaces/${WS}/tasks/export`, {
+      format: "csv",
+      scope: "filters",
+    });
+    expect(downloadBlob).toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.rowCount).toBe(12);
+      expect(result.data.filename).toBe("tasks.csv");
+    }
+  });
+
+  it("CRUDs saved views on workspace routes", async () => {
+    vi.mocked(get).mockResolvedValueOnce(
+      ok([
+        {
+          id: "v1",
+          workspaceId: WS,
+          ownerUserId: "u1",
+          name: "Mine",
+          viewType: "LIST",
+          filtersJson: {},
+          sortJson: {},
+          groupByJson: {},
+          columnsJson: [],
+          displayOptionsJson: {},
+          isDefault: false,
+        },
+      ]),
+    );
+    const listed = await tasksService.listSavedViews(WS);
+    expect(get).toHaveBeenCalledWith(`/workspaces/${WS}/saved-views`);
+    expect(listed.ok).toBe(true);
+
+    vi.mocked(post).mockResolvedValueOnce(
+      ok({
+        id: "v2",
+        workspaceId: WS,
+        ownerUserId: "u1",
+        name: "Board",
+        viewType: "BOARD",
+        filtersJson: {},
+        sortJson: {},
+        groupByJson: {},
+        columnsJson: [],
+        displayOptionsJson: { view: "board" },
+        isDefault: true,
+      }),
+    );
+    const created = await tasksService.createSavedView(WS, {
+      name: "Board",
+      viewType: "BOARD",
+      isDefault: true,
+    });
+    expect(post).toHaveBeenCalledWith(`/workspaces/${WS}/saved-views`, {
+      name: "Board",
+      viewType: "BOARD",
+      isDefault: true,
+    });
+    expect(created.ok).toBe(true);
+
+    vi.mocked(patch).mockResolvedValueOnce(
+      ok({
+        id: "v2",
+        workspaceId: WS,
+        ownerUserId: "u1",
+        name: "Board 2",
+        viewType: "BOARD",
+        filtersJson: {},
+        sortJson: {},
+        groupByJson: {},
+        columnsJson: [],
+        displayOptionsJson: {},
+        isDefault: true,
+      }),
+    );
+    await tasksService.updateSavedView(WS, "v2", { name: "Board 2" });
+    expect(patch).toHaveBeenCalledWith(`/workspaces/${WS}/saved-views/v2`, {
+      name: "Board 2",
+    });
+
+    vi.mocked(del).mockResolvedValueOnce(ok({ id: "v2", deleted: true }));
+    const removed = await tasksService.deleteSavedView(WS, "v2");
+    expect(del).toHaveBeenCalledWith(`/workspaces/${WS}/saved-views/v2`);
+    expect(removed.ok).toBe(true);
   });
 });

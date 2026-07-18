@@ -18,6 +18,14 @@
   box-shadow: var(--ds-shadow-lg);
 }
 
+.lg {
+  width: min(560px, 96vw);
+}
+
+.xl {
+  width: min(760px, 96vw);
+}
+
 .right {
   right: 0;
   border-left: 1px solid var(--ds-color-border);

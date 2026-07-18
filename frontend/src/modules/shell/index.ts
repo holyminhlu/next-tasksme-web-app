@@ -1,5 +1,5 @@
 export { ShellProvider, useShell } from "./ShellProvider";
-export type { QuickCreateKind } from "./ShellProvider";
+export type { QuickCreateKind, QuickCreateOptions } from "./ShellProvider";
 export { AppShell } from "./components/AppShell";
 export { PageHeader } from "./components/PageHeader";
 export { NotificationList } from "./components/NotificationCenter";

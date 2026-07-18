@@ -309,12 +309,16 @@ function InviteMemberForm({ onClose }: { onClose: () => void }) {
 }
 
 export function QuickCreateDialogs() {
-  const { quickCreate, setQuickCreate } = useShell();
-  const [taskMode, setTaskMode] = useState<"smart" | "full">("smart");
+  const { quickCreate, quickCreateOptions, setQuickCreate } = useShell();
+  const [manualTaskMode, setManualTaskMode] = useState<"smart" | "full" | null>(
+    null,
+  );
+  const preferFullForm = Boolean(quickCreateOptions?.initialDueDate);
+  const taskMode = manualTaskMode ?? (preferFullForm ? "full" : "smart");
 
   const close = () => {
     setQuickCreate(null);
-    setTaskMode("smart");
+    setManualTaskMode(null);
   };
 
   return (
@@ -336,7 +340,7 @@ export function QuickCreateDialogs() {
             role="tab"
             aria-selected={taskMode === "smart"}
             className={`${styles.modeTab} ${taskMode === "smart" ? styles.modeTabActive : ""}`.trim()}
-            onClick={() => setTaskMode("smart")}
+            onClick={() => setManualTaskMode("smart")}
           >
             Smart Capture
           </button>
@@ -345,7 +349,7 @@ export function QuickCreateDialogs() {
             role="tab"
             aria-selected={taskMode === "full"}
             className={`${styles.modeTab} ${taskMode === "full" ? styles.modeTabActive : ""}`.trim()}
-            onClick={() => setTaskMode("full")}
+            onClick={() => setManualTaskMode("full")}
           >
             Full form
           </button>
@@ -353,7 +357,10 @@ export function QuickCreateDialogs() {
         {taskMode === "smart" ? (
           <SmartCaptureForm onClose={close} />
         ) : (
-          <CreateTaskForm onClose={close} />
+          <CreateTaskForm
+            onClose={close}
+            initialDueDate={quickCreateOptions?.initialDueDate}
+          />
         )}
       </Dialog>
 

@@ -1,4 +1,4 @@
-import { del, get, patch, post, put } from "@/lib/api/client";
+import { del, downloadBlob, get, patch, post, postBlob, put } from "@/lib/api/client";
 import { buildQueryString } from "@/lib/api/query";
 import {
   MAPPING_ERROR,
@@ -10,34 +10,48 @@ import type {
   BulkDeleteInput,
   BulkMutationResult,
   BulkUpdateInput,
+  CalendarTasksResult,
   CandidateOption,
   CreateProjectInput,
+  CreateSavedViewInput,
   CreateTaskInput,
   DeleteTaskResult,
+  ExportFileResult,
+  ExportTasksInput,
+  MoveTaskInput,
   ParseTaskInput,
   ParseTaskResult,
   ProjectMemberSummary,
   ProjectRecord,
+  SavedViewRecord,
   StatusMutationInput,
   TaskActivityResult,
   TaskListFilters,
   TaskListResult,
   TaskRecord,
+  TaskStatus,
+  TimelineGroupBy,
+  TimelineTasksResult,
   UpdateProjectInput,
+  UpdateSavedViewInput,
   UpdateTaskInput,
   VersionMutationInput,
 } from "./tasks.types";
 import {
   mapBulkMutationResult,
+  mapCalendarTasksResult,
   mapCandidates,
   mapDeleteTaskResult,
   mapParseResult,
   mapProject,
   mapProjectList,
   mapProjectMemberList,
+  mapSavedView,
+  mapSavedViewList,
   mapTask,
   mapTaskActivityList,
   mapTaskList,
+  mapTimelineTasksResult,
 } from "./tasks.helpers";
 
 function requireMapped<T>(result: ServiceResult<T | null>): ServiceResult<T> {
@@ -270,6 +284,199 @@ export async function parseTask(
   return requireMapped(
     toServiceResult(envelope, (data) => mapParseResult(data)),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 — board / calendar / timeline / move / export
+// ---------------------------------------------------------------------------
+
+export async function listBoardColumn(
+  workspaceId: string,
+  filters: TaskListFilters & { status: TaskStatus },
+): Promise<ServiceResult<TaskListResult>> {
+  const envelope = await get<unknown>(
+    `/workspaces/${workspaceId}/tasks/board${buildQueryString({
+      ...buildTaskListQueryParams(filters),
+      status: filters.status,
+      sortBy: filters.sortBy ?? "rank",
+      sortOrder: filters.sortOrder ?? "asc",
+    })}`,
+  );
+
+  return toServiceResult(envelope, (data, meta) => mapTaskList(data, meta));
+}
+
+export async function listCalendar(
+  workspaceId: string,
+  filters: TaskListFilters & {
+    from: string;
+    to: string;
+    timezone?: string | null;
+  },
+): Promise<ServiceResult<CalendarTasksResult>> {
+  const envelope = await get<unknown>(
+    `/workspaces/${workspaceId}/tasks/calendar${buildQueryString({
+      ...buildTaskListQueryParams(filters),
+      from: filters.from,
+      to: filters.to,
+      timezone: filters.timezone,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    })}`,
+  );
+
+  return toServiceResult(envelope, (data, meta) =>
+    mapCalendarTasksResult(data, meta),
+  );
+}
+
+export async function listTimeline(
+  workspaceId: string,
+  filters: TaskListFilters & {
+    from: string;
+    to: string;
+    groupBy?: TimelineGroupBy;
+    timezone?: string | null;
+  },
+): Promise<ServiceResult<TimelineTasksResult>> {
+  const envelope = await get<unknown>(
+    `/workspaces/${workspaceId}/tasks/timeline${buildQueryString({
+      ...buildTaskListQueryParams(filters),
+      from: filters.from,
+      to: filters.to,
+      groupBy: filters.groupBy ?? "project",
+      timezone: filters.timezone,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    })}`,
+  );
+
+  return toServiceResult(envelope, (data, meta) =>
+    mapTimelineTasksResult(data, meta),
+  );
+}
+
+export async function moveTask(
+  workspaceId: string,
+  taskId: string,
+  input: MoveTaskInput,
+): Promise<ServiceResult<TaskRecord>> {
+  const envelope = await patch<unknown>(
+    `/workspaces/${workspaceId}/tasks/${taskId}/move`,
+    input,
+  );
+
+  return requireMapped(toServiceResult(envelope, (data) => mapTask(data)));
+}
+
+export async function exportTasks(
+  workspaceId: string,
+  input: ExportTasksInput,
+): Promise<ServiceResult<ExportFileResult>> {
+  const result = await postBlob(
+    `/workspaces/${workspaceId}/tasks/export`,
+    input,
+  );
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      code: result.code,
+      message: result.message,
+    };
+  }
+
+  const rowHeader = result.headers.get("X-Export-Row-Count");
+  const rowCount = rowHeader ? Number(rowHeader) : null;
+
+  return {
+    ok: true,
+    data: {
+      blob: result.blob,
+      filename:
+        result.filename ??
+        `tasks-export.${input.format === "xlsx" ? "xlsx" : "csv"}`,
+      contentType: result.contentType ?? result.blob.type,
+      rowCount: Number.isFinite(rowCount) ? rowCount : null,
+    },
+  };
+}
+
+/** Convenience: export and trigger a browser download. */
+export async function downloadExportedTasks(
+  workspaceId: string,
+  input: ExportTasksInput,
+): Promise<ServiceResult<ExportFileResult>> {
+  const result = await exportTasks(workspaceId, input);
+  if (result.ok) {
+    downloadBlob(result.data.blob, result.data.filename);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Saved views
+// ---------------------------------------------------------------------------
+
+export async function listSavedViews(
+  workspaceId: string,
+): Promise<ServiceResult<SavedViewRecord[]>> {
+  const envelope = await get<unknown>(
+    `/workspaces/${workspaceId}/saved-views`,
+  );
+  return toServiceResult(envelope, (data) => mapSavedViewList(data));
+}
+
+export async function getSavedView(
+  workspaceId: string,
+  viewId: string,
+): Promise<ServiceResult<SavedViewRecord>> {
+  const envelope = await get<unknown>(
+    `/workspaces/${workspaceId}/saved-views/${viewId}`,
+  );
+  return requireMapped(
+    toServiceResult(envelope, (data) => mapSavedView(data)),
+  );
+}
+
+export async function createSavedView(
+  workspaceId: string,
+  input: CreateSavedViewInput,
+): Promise<ServiceResult<SavedViewRecord>> {
+  const envelope = await post<unknown>(
+    `/workspaces/${workspaceId}/saved-views`,
+    input,
+  );
+  return requireMapped(
+    toServiceResult(envelope, (data) => mapSavedView(data)),
+  );
+}
+
+export async function updateSavedView(
+  workspaceId: string,
+  viewId: string,
+  input: UpdateSavedViewInput,
+): Promise<ServiceResult<SavedViewRecord>> {
+  const envelope = await patch<unknown>(
+    `/workspaces/${workspaceId}/saved-views/${viewId}`,
+    input,
+  );
+  return requireMapped(
+    toServiceResult(envelope, (data) => mapSavedView(data)),
+  );
+}
+
+export async function deleteSavedView(
+  workspaceId: string,
+  viewId: string,
+): Promise<ServiceResult<{ id: string; deleted: boolean }>> {
+  const envelope = await del<{ id: string; deleted: boolean }>(
+    `/workspaces/${workspaceId}/saved-views/${viewId}`,
+  );
+  return toServiceResult(envelope, (data) => ({
+    id: data?.id ?? viewId,
+    deleted: data?.deleted ?? true,
+  }));
 }
 
 // ---------------------------------------------------------------------------
