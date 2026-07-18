@@ -151,4 +151,8 @@ export type PermissionKey =
   | "projects:update"
   | "tasks:read"
   | "tasks:create"
-  | "tasks:update";
+  | "tasks:update"
+  | "tasks:delete"
+  | "projects:delete"
+  | "dashboard:read"
+  | "activity:read";

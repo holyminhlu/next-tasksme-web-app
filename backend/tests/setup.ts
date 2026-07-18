@@ -8,7 +8,30 @@ resetEnvCache();
 loadEnv();
 resetEmailService();
 
+/**
+ * Phase 4 migration may already be marked applied on the test DB before
+ * completedAt was added to the SQL. Ensure the column/index exist without reset.
+ */
+async function ensureTaskCompletedAtColumn() {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "completedAt" TIMESTAMP(3)
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "tasks_workspaceId_status_completedAt_idx"
+      ON "tasks"("workspaceId", "status", "completedAt")
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE "tasks"
+    SET "completedAt" = "updatedAt"
+    WHERE "status" = 'DONE'
+      AND "completedAt" IS NULL
+      AND "deletedAt" IS NULL
+  `);
+}
+
 beforeAll(async () => {
+  await ensureTaskCompletedAtColumn();
+
   for (const permission of PERMISSIONS) {
     await prisma.permission.upsert({
       where: { key: permission.key },
@@ -23,6 +46,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.auditLog.deleteMany();
+  await prisma.activityEvent.deleteMany();
   await prisma.task.deleteMany();
   await prisma.project.deleteMany();
   await prisma.workspaceModule.deleteMany();

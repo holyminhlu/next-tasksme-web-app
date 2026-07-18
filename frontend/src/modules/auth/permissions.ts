@@ -19,6 +19,10 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "tasks:read",
     "tasks:create",
     "tasks:update",
+    "tasks:delete",
+    "projects:delete",
+    "dashboard:read",
+    "activity:read",
   ],
   admin: [
     "workspace:read",
@@ -36,6 +40,10 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "tasks:read",
     "tasks:create",
     "tasks:update",
+    "tasks:delete",
+    "projects:delete",
+    "dashboard:read",
+    "activity:read",
   ],
   manager: [
     "workspace:read",
@@ -49,6 +57,9 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "tasks:read",
     "tasks:create",
     "tasks:update",
+    "tasks:delete",
+    "dashboard:read",
+    "activity:read",
   ],
   member: [
     "workspace:read",
@@ -58,6 +69,9 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "tasks:read",
     "tasks:create",
     "tasks:update",
+    "tasks:delete",
+    "dashboard:read",
+    "activity:read",
   ],
 };
 

@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Info } from "lucide-react";
 import { useAuth } from "@/modules/auth";
 import { inviteMember } from "@/modules/onboarding/onboarding.service";
+import { SmartCaptureForm, tasksService } from "@/modules/tasks";
 import {
-  Badge,
   Button,
   Dialog,
   FormField,
@@ -19,63 +18,79 @@ import styles from "./QuickCreate.module.css";
 
 const INVITABLE_ROLES = ["admin", "manager", "member"] as const;
 
-/**
- * Placeholder create form. Task/project creation APIs are not part of this
- * phase, so the form is intentionally non-submittable — we never fake a
- * successful backend mutation.
- */
-function PlaceholderCreateForm({
-  entity,
-  onClose,
-}: {
-  entity: "task" | "project";
-  onClose: () => void;
-}) {
+function CreateProjectForm({ onClose }: { onClose: () => void }) {
+  const { selectedWorkspace } = useAuth();
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+
+    if (!selectedWorkspace || submitting || !name.trim()) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const result = await tasksService.createProject(selectedWorkspace.id, {
+      name: name.trim(),
+      description: description.trim() || undefined,
+    });
+
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(
+        result.code === "NOT_FOUND"
+          ? "Project creation isn't available yet on this server."
+          : result.message,
+      );
+      return;
+    }
+
+    toast({
+      title: "Project created",
+      description: `"${result.data.name}" is ready for tasks.`,
+      tone: "success",
+    });
+    onClose();
+  }
+
   return (
-    <form
-      className={styles.form}
-      onSubmit={(event) => event.preventDefault()}
-      aria-label={`New ${entity} (preview)`}
-    >
-      <p className={styles.notice}>
-        <Info size={16} aria-hidden className={styles.noticeIcon} />
-        <span>
-          The {entity} API isn&apos;t available yet — this form is a preview of
-          the quick-create flow and cannot save anything. Creating {entity}s
-          arrives in a later phase.
-        </span>
-      </p>
-      <FormField label={entity === "task" ? "Task title" : "Project name"} required>
+    <form className={styles.form} onSubmit={handleSubmit}>
+      {error && (
+        <p className={styles.errorBanner} role="alert">
+          {error}
+        </p>
+      )}
+      <FormField label="Project name" required>
         {(props) => (
           <TextInput
             {...props}
             data-autofocus
-            placeholder={
-              entity === "task" ? "e.g. Prepare weekly report" : "e.g. Website revamp"
-            }
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="e.g. Website revamp"
           />
         )}
       </FormField>
       <FormField label="Description" hint="Optional">
-        {(props) => <TextArea {...props} rows={3} />}
+        {(props) => (
+          <TextArea
+            {...props}
+            rows={3}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        )}
       </FormField>
-      {entity === "task" && (
-        <FormField label="Priority">
-          {(props) => (
-            <Select {...props} defaultValue="MEDIUM">
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-              <option value="URGENT">Urgent</option>
-            </Select>
-          )}
-        </FormField>
-      )}
-      <div>
-        <Badge tone="warning">Save unavailable — API coming in a later phase</Badge>
-      </div>
-      <Button variant="secondary" onClick={onClose}>
-        Close
+      <Button type="submit" loading={submitting} disabled={!name.trim()}>
+        Create project
       </Button>
     </form>
   );
@@ -172,9 +187,10 @@ export function QuickCreateDialogs() {
         open={quickCreate === "task"}
         onClose={close}
         title="New task"
-        description="Quickly capture a task in this workspace."
+        description="Describe the task in your own words — Smart Capture structures it for you."
+        size="lg"
       >
-        <PlaceholderCreateForm entity="task" onClose={close} />
+        <SmartCaptureForm onClose={close} />
       </Dialog>
 
       <Dialog
@@ -183,7 +199,7 @@ export function QuickCreateDialogs() {
         title="New project"
         description="Group related tasks into a project."
       >
-        <PlaceholderCreateForm entity="project" onClose={close} />
+        <CreateProjectForm onClose={close} />
       </Dialog>
 
       <Dialog

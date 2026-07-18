@@ -1,0 +1,353 @@
+/* Dashboard widget frames and widget-specific layouts. */
+
+.widget {
+  background: var(--ds-color-surface);
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-lg);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.widgetHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.widgetTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.widgetTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--ds-color-text);
+  margin: 0;
+}
+
+.widgetDescription {
+  font-size: 0.82rem;
+  color: var(--ds-color-text-muted);
+  margin: 0;
+}
+
+.widgetActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.widgetBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.widgetFooterLink {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ds-color-primary);
+  align-self: flex-start;
+}
+
+.widgetFooterLink:hover {
+  text-decoration: underline;
+}
+
+.widgetRefreshing {
+  font-size: 0.75rem;
+  color: var(--ds-color-text-subtle);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.skeletonRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* --- Filter bar ----------------------------------------------------------- */
+
+.filterBar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--ds-color-surface);
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-lg);
+  padding: 12px 16px;
+}
+
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
+  flex: 1;
+  max-width: 210px;
+}
+
+.filterLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--ds-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.filterMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.lastUpdated {
+  font-size: 0.78rem;
+  color: var(--ds-color-text-subtle);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .filterField {
+    max-width: none;
+    min-width: 45%;
+  }
+
+  .filterMeta {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* --- Stats -------------------------------------------------------------- */
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.statTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-color-surface);
+  color: inherit;
+  min-width: 0;
+}
+
+a.statTile:hover {
+  border-color: var(--ds-color-primary-soft-border);
+  background: var(--ds-color-primary-soft);
+}
+
+a.statTile:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.statValue {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--ds-color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.statValueDanger {
+  color: var(--ds-color-danger);
+}
+
+.statValueWarning {
+  color: var(--ds-color-warning);
+}
+
+.statLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ds-color-text-muted);
+}
+
+/* --- My Work ------------------------------------------------------------ */
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--ds-color-border);
+  min-width: 0;
+}
+
+.taskRow:last-child {
+  border-bottom: none;
+}
+
+.taskRowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  border-radius: var(--ds-radius-sm);
+}
+
+.taskRowMain:hover .taskRowTitle {
+  color: var(--ds-color-primary);
+  text-decoration: underline;
+}
+
+.taskRowMain:focus-visible {
+  outline: 2px solid var(--ds-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.taskRowTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ds-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskRowTitleDone {
+  text-decoration: line-through;
+  color: var(--ds-color-text-muted);
+}
+
+.taskRowMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--ds-color-text-muted);
+  flex-wrap: wrap;
+}
+
+.taskRowActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* --- Overview / charts --------------------------------------------------- */
+
+.chartsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.chartBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chartBlockTitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ds-color-text);
+  margin: 0;
+}
+
+/* --- Activity ------------------------------------------------------------ */
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activityItem {
+  display: flex;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--ds-color-border);
+}
+
+.activityItem:last-child {
+  border-bottom: none;
+}
+
+.activityDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-color-primary);
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.activityBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.activitySummary {
+  font-size: 0.86rem;
+  color: var(--ds-color-text);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.activityMeta {
+  font-size: 0.74rem;
+  color: var(--ds-color-text-subtle);
+}
+
+.activityFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}

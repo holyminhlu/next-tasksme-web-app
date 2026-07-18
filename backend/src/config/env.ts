@@ -61,6 +61,8 @@ const envSchema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
   ENABLE_SWAGGER: booleanFromEnv.optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().min(1).default("gemini-3-flash-preview"),
 });
 
 export type Env = z.infer<typeof envSchema> & {

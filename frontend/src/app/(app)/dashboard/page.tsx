@@ -1,148 +1,203 @@
 "use client";
 
-import Link from "next/link";
+import { useCallback, useMemo, useState } from "react";
 import { FolderKanban, Plus, UserPlus } from "lucide-react";
-import { Can, useAuth } from "@/modules/auth";
-import { Badge, Button } from "@/modules/design-system";
+import { Can, hasPermission, useAuth } from "@/modules/auth";
+import { Button } from "@/modules/design-system";
+import {
+  ActivityWidget,
+  DashboardFilterBar,
+  MyWorkWidget,
+  OverviewWidget,
+  StatsWidget,
+  dashboardService,
+  dateRangeForPreset,
+  greetingForHour,
+  useWidget,
+  type DashboardFilterState,
+  type DashboardFilters,
+} from "@/modules/dashboard";
+import { formatAbsoluteDateTime } from "@/modules/tasks";
 import { PageHeader, useShell } from "@/modules/shell";
 import styles from "../app-pages.module.css";
+import dashboardStyles from "./dashboard.module.css";
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  manager: "Manager",
+  member: "Member",
+};
 
 export default function DashboardPage() {
-  const { user, profile, workspaces, selectedWorkspace, permissions } =
-    useAuth();
-  const { setQuickCreate } = useShell();
+  const { user, selectedWorkspace, permissions } = useAuth();
+  const { setQuickCreate, navContext } = useShell();
 
+  const workspaceId = selectedWorkspace?.id ?? null;
   const isOrganization = selectedWorkspace?.type === "ORGANIZATION";
+  const canReadDashboard = hasPermission(permissions, "dashboard:read");
+  const canReadTasks = hasPermission(permissions, "tasks:read");
+
+  const modulesKnown = navContext.enabledModuleKeys !== null;
+  const tasksModuleEnabled =
+    !modulesKnown || navContext.enabledModuleKeys!.includes("tasks");
+  const projectsModuleEnabled =
+    !modulesKnown || navContext.enabledModuleKeys!.includes("projects");
+
+  const timezone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    [],
+  );
+  const locale =
+    typeof navigator !== "undefined" ? navigator.language : undefined;
+
+  const [filterState, setFilterState] = useState<DashboardFilterState>({
+    preset: "last7",
+    projectId: null,
+    memberId: null,
+    status: null,
+  });
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const filters = useMemo<DashboardFilters>(() => {
+    const range = dateRangeForPreset(filterState.preset, new Date());
+
+    return {
+      from: range.from,
+      to: range.to,
+      projectId: filterState.projectId,
+      memberId: filterState.memberId,
+      status: filterState.status,
+    };
+  }, [filterState]);
+
+  // The page owns the summary fetch so the header can show a shared
+  // refresh spinner and "last updated" timestamp.
+  const summaryFetcher = useCallback(() => {
+    void refreshKey;
+    return dashboardService.getSummary(workspaceId ?? "", filters, timezone);
+  }, [workspaceId, filters, timezone, refreshKey]);
+
+  const summaryState = useWidget(
+    workspaceId && canReadDashboard && canReadTasks ? summaryFetcher : null,
+  );
+
+  const refresh = useCallback(() => {
+    setRefreshKey((key) => key + 1);
+  }, []);
+
+  const greeting = greetingForHour(new Date().getHours());
+  const firstName = user?.fullName?.split(" ")[0] ?? "there";
+  const roleLabel = selectedWorkspace
+    ? (ROLE_LABELS[selectedWorkspace.roleKey] ?? selectedWorkspace.roleKey)
+    : null;
+
+  const lastUpdatedLabel = useMemo(() => {
+    const generatedAt = summaryState.data?.generatedAt;
+
+    if (generatedAt) {
+      const formatted = formatAbsoluteDateTime(generatedAt, locale);
+
+      if (formatted) {
+        return formatted;
+      }
+    }
+
+    return summaryState.lastUpdated
+      ? formatAbsoluteDateTime(summaryState.lastUpdated.toISOString(), locale)
+      : null;
+  }, [summaryState.data?.generatedAt, summaryState.lastUpdated, locale]);
 
   return (
     <div className={styles.stack}>
       <PageHeader
-        title={`Welcome back, ${user?.fullName?.split(" ")[0] ?? "there"}`}
+        title={`${greeting}, ${firstName}`}
         description={
           selectedWorkspace
-            ? `You're working in ${selectedWorkspace.name}.`
+            ? `${selectedWorkspace.name}${roleLabel ? ` · ${roleLabel}` : ""}`
             : "Select a workspace to get started."
         }
         actions={
           <>
-            <Can permission="tasks:create">
-              <Button
-                iconLeft={<Plus size={16} aria-hidden />}
-                onClick={() => setQuickCreate("task")}
-              >
-                New task
-              </Button>
-            </Can>
-            <Can permission="projects:create">
-              <Button
-                variant="secondary"
-                iconLeft={<FolderKanban size={16} aria-hidden />}
-                onClick={() => setQuickCreate("project")}
-              >
-                New project
-              </Button>
-            </Can>
+            {tasksModuleEnabled && (
+              <Can permission="tasks:create">
+                <Button
+                  iconLeft={<Plus size={16} aria-hidden />}
+                  onClick={() => setQuickCreate("task")}
+                >
+                  New task
+                </Button>
+              </Can>
+            )}
+            {projectsModuleEnabled && (
+              <Can permission="projects:create">
+                <Button
+                  variant="secondary"
+                  iconLeft={<FolderKanban size={16} aria-hidden />}
+                  onClick={() => setQuickCreate("project")}
+                >
+                  New project
+                </Button>
+              </Can>
+            )}
+            {isOrganization && (
+              <Can permission="members:invite">
+                <Button
+                  variant="ghost"
+                  iconLeft={<UserPlus size={16} aria-hidden />}
+                  onClick={() => setQuickCreate("invite")}
+                >
+                  Invite
+                </Button>
+              </Can>
+            )}
           </>
         }
       />
 
-      <div className={styles.grid}>
-        <section className={styles.card} aria-labelledby="dashboard-account">
-          <h2 id="dashboard-account" className={styles.cardTitle}>
-            Account
+      {canReadDashboard && canReadTasks && tasksModuleEnabled ? (
+        <>
+          <DashboardFilterBar
+            value={filterState}
+            onChange={setFilterState}
+            onRefresh={refresh}
+            refreshing={summaryState.refreshing}
+            lastUpdatedLabel={lastUpdatedLabel}
+            projectsEnabled={projectsModuleEnabled}
+          />
+
+          <StatsWidget state={summaryState} filters={filters} />
+
+          <div className={dashboardStyles.mainGrid}>
+            <MyWorkWidget
+              filters={filters}
+              timezone={timezone}
+              refreshKey={refreshKey}
+              onTaskDeleted={refresh}
+            />
+            <ActivityWidget filters={filters} refreshKey={refreshKey} />
+          </div>
+
+          <OverviewWidget
+            filters={filters}
+            timezone={timezone}
+            refreshKey={refreshKey}
+          />
+        </>
+      ) : (
+        <section className={styles.card} aria-labelledby="dashboard-limited">
+          <h2 id="dashboard-limited" className={styles.cardTitle}>
+            Workspace dashboard
           </h2>
-          <dl className={styles.definitionList}>
-            <dt>Name</dt>
-            <dd>{profile?.fullName ?? "—"}</dd>
-            <dt>Email</dt>
-            <dd>{profile?.email ?? "—"}</dd>
-            <dt>Status</dt>
-            <dd>
-              <Badge tone={profile?.status === "ACTIVE" ? "success" : "warning"}>
-                {profile?.status ?? "UNKNOWN"}
-              </Badge>
-            </dd>
-          </dl>
+          <p className={styles.cardDescription}>
+            {!canReadDashboard
+              ? "Your role doesn't include dashboard access in this workspace."
+              : tasksModuleEnabled
+                ? "Your role doesn't include access to task data in this workspace, so there are no widgets to show."
+                : "The tasks module is disabled for this workspace, so the dashboard has nothing to display. An admin can re-enable it under Settings → Modules."}
+          </p>
         </section>
-
-        <section className={styles.card} aria-labelledby="dashboard-workspace">
-          <h2 id="dashboard-workspace" className={styles.cardTitle}>
-            Active workspace
-          </h2>
-          {selectedWorkspace ? (
-            <dl className={styles.definitionList}>
-              <dt>Name</dt>
-              <dd>{selectedWorkspace.name}</dd>
-              <dt>Type</dt>
-              <dd>
-                <Badge tone={isOrganization ? "primary" : "neutral"}>
-                  {isOrganization ? "Organization" : "Personal"}
-                </Badge>
-              </dd>
-              <dt>Your role</dt>
-              <dd>{selectedWorkspace.roleKey}</dd>
-            </dl>
-          ) : (
-            <p className={styles.muted}>No workspace selected.</p>
-          )}
-        </section>
-      </div>
-
-      <section className={styles.card} aria-labelledby="dashboard-workspaces">
-        <h2 id="dashboard-workspaces" className={styles.cardTitle}>
-          Your workspaces
-        </h2>
-        {workspaces.length === 0 ? (
-          <p className={styles.muted}>No workspaces yet.</p>
-        ) : (
-          <dl className={styles.definitionList}>
-            {workspaces.map((workspace) => (
-              <div key={workspace.id} style={{ display: "contents" }}>
-                <dt>{workspace.name}</dt>
-                <dd>
-                  {workspace.type === "PERSONAL" ? "Personal" : "Organization"} ·{" "}
-                  {workspace.roleKey}
-                  {workspace.id === selectedWorkspace?.id && (
-                    <>
-                      {" "}
-                      <Badge tone="primary">Active</Badge>
-                    </>
-                  )}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </section>
-
-      <Can permission="members:invite">
-        {isOrganization && (
-          <section className={styles.card} aria-labelledby="dashboard-team">
-            <h2 id="dashboard-team" className={styles.cardTitle}>
-              Grow your team
-            </h2>
-            <p className={styles.cardDescription}>
-              You can invite members to this workspace.
-            </p>
-            <div className={styles.row}>
-              <Button
-                variant="secondary"
-                iconLeft={<UserPlus size={16} aria-hidden />}
-                onClick={() => setQuickCreate("invite")}
-              >
-                Invite member
-              </Button>
-              <Link href="/settings/members" className={styles.muted}>
-                Manage members
-              </Link>
-            </div>
-          </section>
-        )}
-      </Can>
-
-      <p className={styles.muted}>
-        Effective permissions: {permissions.join(", ") || "none"}
-      </p>
+      )}
     </div>
   );
 }
