@@ -12,6 +12,10 @@ export type WorkspaceDetails = {
   timezone: string;
   locale: string;
   logoUrl: string | null;
+  dependencyCompletionPolicy:
+    | "WARN_ONLY"
+    | "BLOCK"
+    | "BLOCK_WITH_OVERRIDE";
   ownerId: string;
   createdAt: string;
   updatedAt: string;
@@ -25,6 +29,10 @@ export type UpdateWorkspaceInput = {
   timezone?: string;
   locale?: string;
   logoUrl?: string | null;
+  dependencyCompletionPolicy?:
+    | "WARN_ONLY"
+    | "BLOCK"
+    | "BLOCK_WITH_OVERRIDE";
 };
 
 export type TransferOwnershipInput = {

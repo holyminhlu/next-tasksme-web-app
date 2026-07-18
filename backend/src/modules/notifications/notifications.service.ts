@@ -61,6 +61,8 @@ export class NotificationsService {
       workspaceId,
       userId,
       taskAssigned: preference?.taskAssigned ?? true,
+      taskMentioned: preference?.taskMentioned ?? true,
+      taskUnblocked: preference?.taskUnblocked ?? true,
       updatedAt: preference?.updatedAt.toISOString() ?? null,
     };
   }
@@ -72,13 +74,25 @@ export class NotificationsService {
   ) {
     const preference = await prisma.notificationPreference.upsert({
       where: { workspaceId_userId: { workspaceId, userId } },
-      update: { taskAssigned: input.taskAssigned },
-      create: { workspaceId, userId, taskAssigned: input.taskAssigned },
+      update: {
+        taskAssigned: input.taskAssigned,
+        taskMentioned: input.taskMentioned,
+        taskUnblocked: input.taskUnblocked,
+      },
+      create: {
+        workspaceId,
+        userId,
+        taskAssigned: input.taskAssigned ?? true,
+        taskMentioned: input.taskMentioned ?? true,
+        taskUnblocked: input.taskUnblocked ?? true,
+      },
     });
     return {
       workspaceId: preference.workspaceId,
       userId: preference.userId,
       taskAssigned: preference.taskAssigned,
+      taskMentioned: preference.taskMentioned,
+      taskUnblocked: preference.taskUnblocked,
       updatedAt: preference.updatedAt.toISOString(),
     };
   }

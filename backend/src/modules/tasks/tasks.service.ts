@@ -21,6 +21,11 @@ import {
 import { formatYmd } from "../../lib/timezone.js";
 import { recordActivity } from "../../services/activity.service.js";
 import { writeAuditLog } from "../../services/audit.service.js";
+import {
+  applySuccessorHandoffs,
+  assertCompletionAllowed,
+  recordTaskStatusTransition,
+} from "../../services/task-transitions.service.js";
 import { parseTaskText as parseTaskDraft } from "./parse.service.js";
 import {
   buildTaskListWhere,
@@ -56,7 +61,11 @@ const EXPORT_DEFAULT_COLUMNS = [
   "dueDate",
 ] as const;
 
-type Actor = { userId: string; roleKey: string };
+type Actor = {
+  userId: string;
+  roleKey: string;
+  permissions?: string[];
+};
 const TASK_INCLUDE = {
   project: { select: { id: true, name: true, visibility: true } },
   assignee: { select: { id: true, fullName: true, email: true } },
@@ -91,6 +100,11 @@ function mapTask(task: TaskWithPeople) {
     completedBy: mapPerson(task.completedBy),
     isBlocked: task.isBlocked,
     blockedReason: task.blockedReason,
+    dependencyBlocked: task.dependencyBlocked,
+    dependencyOverrideReason: task.dependencyOverrideReason,
+    dependencyOverriddenById: task.dependencyOverriddenById,
+    dependencyOverriddenAt:
+      task.dependencyOverriddenAt?.toISOString() ?? null,
     source: task.source,
     createdById: task.createdById,
     creator: mapPerson(task.creator),
@@ -527,6 +541,13 @@ export class TasksService {
         },
         include: TASK_INCLUDE,
       });
+      await recordTaskStatusTransition(tx, {
+        taskId: created.id,
+        fromStatus: null,
+        toStatus: created.status,
+        changedById: actor.userId,
+        changedAt: now,
+      });
       await createAssignmentNotification(tx, created, assigneeId, actor.userId);
       return created;
     });
@@ -615,8 +636,17 @@ export class TasksService {
     const reopening =
       input.targetStatus !== "DONE" && existing.status === "DONE";
     const statusChanged = input.targetStatus !== existing.status;
+    const completionDecision = enteringDone
+      ? await assertCompletionAllowed(
+          workspaceId,
+          taskId,
+          actor,
+          input.dependencyOverrideReason,
+        )
+      : null;
+    const transitionAt = new Date();
 
-    const task = await prisma.$transaction(async (tx) => {
+    const transactionResult = await prisma.$transaction(async (tx) => {
       let nextRank = rankBetween(beforeRank, afterRank);
       if (!nextRank) {
         await this.rebalanceColumn(
@@ -650,9 +680,32 @@ export class TasksService {
           isBlocked: input.targetStatus === "BLOCKED",
           blockedReason:
             input.targetStatus === "BLOCKED" ? existing.blockedReason : null,
+          dependencyBlocked:
+            enteringDone || input.targetStatus !== "BLOCKED"
+              ? false
+              : existing.dependencyBlocked,
           completedAt: enteringDone ? new Date() : reopening ? null : undefined,
           completedById: enteringDone
             ? actor.userId
+            : reopening
+              ? null
+              : undefined,
+          dependencyOverrideReason: enteringDone
+            ? completionDecision?.overrideReason
+            : reopening
+              ? null
+              : undefined,
+          dependencyOverriddenById: enteringDone
+            ? completionDecision?.overridden
+              ? actor.userId
+              : null
+            : reopening
+              ? null
+              : undefined,
+          dependencyOverriddenAt: enteringDone
+            ? completionDecision?.overridden
+              ? transitionAt
+              : null
             : reopening
               ? null
               : undefined,
@@ -660,11 +713,30 @@ export class TasksService {
         },
       });
       if (result.count !== 1) throw new ConflictError("Task version is stale");
-      return tx.task.findUniqueOrThrow({
+      const updatedTask = await tx.task.findUniqueOrThrow({
         where: { id: existing.id },
         include: TASK_INCLUDE,
       });
+      if (statusChanged) {
+        await recordTaskStatusTransition(tx, {
+          taskId: existing.id,
+          fromStatus: existing.status,
+          toStatus: input.targetStatus,
+          changedById: actor.userId,
+          changedAt: transitionAt,
+        });
+      }
+      const unblocked = enteringDone
+        ? await applySuccessorHandoffs(tx, {
+            workspaceId,
+            predecessorTaskId: existing.id,
+            actorId: actor.userId,
+            now: transitionAt,
+          })
+        : [];
+      return { task: updatedTask, unblocked };
     });
+    const { task, unblocked } = transactionResult;
 
     await emitTaskActivity(
       enteringDone
@@ -675,6 +747,44 @@ export class TasksService {
       task,
       actor,
     );
+    if (completionDecision?.overridden) {
+      await recordActivity({
+        workspaceId,
+        actorId: actor.userId,
+        action: "task.dependency_overridden",
+        resourceType: "task",
+        resourceId: task.id,
+        projectId: task.projectId,
+        summary: `Dependency completion policy overridden for task #${task.taskNumber}`,
+        metadata: {
+          reason: completionDecision.overrideReason,
+          incompleteTaskIds: completionDecision.incomplete.map((item) => item.id),
+        },
+        sensitive: true,
+      });
+      await writeAuditLog({
+        action: "task.dependency_completion_overridden",
+        userId: actor.userId,
+        workspaceId,
+        entityType: "task",
+        entityId: task.id,
+        metadata: {
+          reason: completionDecision.overrideReason,
+          incompleteTaskIds: completionDecision.incomplete.map((item) => item.id),
+        },
+      });
+    }
+    for (const successor of unblocked) {
+      await recordActivity({
+        workspaceId,
+        actorId: actor.userId,
+        action: "task.unblocked",
+        resourceType: "task",
+        resourceId: successor.id,
+        projectId: successor.projectId,
+        summary: `Task #${successor.taskNumber} unblocked after dependencies completed`,
+      });
+    }
     return mapTask(task);
   }
 
@@ -845,8 +955,17 @@ export class TasksService {
     const assignmentChanged =
       input.assigneeId !== undefined && input.assigneeId !== existing.assigneeId;
     const statusChanged = nextStatus !== existing.status;
+    const completionDecision = enteringDone
+      ? await assertCompletionAllowed(
+          workspaceId,
+          taskId,
+          actor,
+          input.dependencyOverrideReason,
+        )
+      : null;
+    const transitionAt = new Date();
 
-    const task = await prisma.$transaction(async (tx) => {
+    const transactionResult = await prisma.$transaction(async (tx) => {
       const result = await tx.task.updateMany({
         where: { id: existing.id, version: input.version },
         data: {
@@ -860,8 +979,31 @@ export class TasksService {
           assigneeId: input.assigneeId,
           isBlocked: nextStatus === "BLOCKED",
           blockedReason: nextStatus === "BLOCKED" ? input.blockedReason : null,
+          dependencyBlocked:
+            enteringDone || nextStatus !== "BLOCKED"
+              ? false
+              : existing.dependencyBlocked,
           completedAt: enteringDone ? new Date() : reopening ? null : undefined,
           completedById: enteringDone ? actor.userId : reopening ? null : undefined,
+          dependencyOverrideReason: enteringDone
+            ? completionDecision?.overrideReason
+            : reopening
+              ? null
+              : undefined,
+          dependencyOverriddenById: enteringDone
+            ? completionDecision?.overridden
+              ? actor.userId
+              : null
+            : reopening
+              ? null
+              : undefined,
+          dependencyOverriddenAt: enteringDone
+            ? completionDecision?.overridden
+              ? transitionAt
+              : null
+            : reopening
+              ? null
+              : undefined,
           version: { increment: 1 },
         },
       });
@@ -873,8 +1015,26 @@ export class TasksService {
       if (assignmentChanged) {
         await createAssignmentNotification(tx, updated, updated.assigneeId, actor.userId);
       }
-      return updated;
+      if (statusChanged) {
+        await recordTaskStatusTransition(tx, {
+          taskId: existing.id,
+          fromStatus: existing.status,
+          toStatus: nextStatus,
+          changedById: actor.userId,
+          changedAt: transitionAt,
+        });
+      }
+      const unblocked = enteringDone
+        ? await applySuccessorHandoffs(tx, {
+            workspaceId,
+            predecessorTaskId: existing.id,
+            actorId: actor.userId,
+            now: transitionAt,
+          })
+        : [];
+      return { task: updated, unblocked };
     });
+    const { task, unblocked } = transactionResult;
     const action = enteringDone
       ? "task.completed"
       : assignmentChanged
@@ -883,6 +1043,44 @@ export class TasksService {
           ? "task.status_changed"
           : "task.updated";
     await emitTaskActivity(action, task, actor);
+    if (completionDecision?.overridden) {
+      await recordActivity({
+        workspaceId,
+        actorId: actor.userId,
+        action: "task.dependency_overridden",
+        resourceType: "task",
+        resourceId: task.id,
+        projectId: task.projectId,
+        summary: `Dependency completion policy overridden for task #${task.taskNumber}`,
+        metadata: {
+          reason: completionDecision.overrideReason,
+          incompleteTaskIds: completionDecision.incomplete.map((item) => item.id),
+        },
+        sensitive: true,
+      });
+      await writeAuditLog({
+        action: "task.dependency_completion_overridden",
+        userId: actor.userId,
+        workspaceId,
+        entityType: "task",
+        entityId: task.id,
+        metadata: {
+          reason: completionDecision.overrideReason,
+          incompleteTaskIds: completionDecision.incomplete.map((item) => item.id),
+        },
+      });
+    }
+    for (const successor of unblocked) {
+      await recordActivity({
+        workspaceId,
+        actorId: actor.userId,
+        action: "task.unblocked",
+        resourceType: "task",
+        resourceId: successor.id,
+        projectId: successor.projectId,
+        summary: `Task #${successor.taskNumber} unblocked after dependencies completed`,
+      });
+    }
     return mapTask(task);
   }
 
@@ -1022,6 +1220,7 @@ export class TasksService {
             priority: item.changes.priority,
             assigneeId: item.changes.assigneeId,
             projectId: item.changes.projectId,
+            dependencyOverrideReason: item.changes.dependencyOverrideReason,
           });
         }
         if (item.changes.archived !== undefined) {

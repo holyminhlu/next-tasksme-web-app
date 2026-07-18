@@ -81,6 +81,8 @@ export type { ActiveFilterChip, DueDescriptor } from "./tasks.helpers";
 export * as tasksService from "./tasks.service";
 export * as collaborationService from "./collaboration.service";
 export * from "./collaboration.types";
+export * from "./workflow.service";
+export * from "./workflow.types";
 export { emitTasksChanged, subscribeTasksChanged } from "./tasks.events";
 export { TaskDetailDialog } from "./components/TaskDetailDialog";
 export { TaskCollaborationPanels } from "./components/TaskCollaborationPanels";

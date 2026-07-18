@@ -17,6 +17,12 @@ import {
 } from "../custom-fields/custom-fields.routes.js";
 import { commentsRouter } from "../comments/comments.routes.js";
 import { attachmentsRouter } from "../attachments/attachments.routes.js";
+import { dependenciesRouter } from "../dependencies/dependencies.routes.js";
+import {
+  taskTimeLogsRouter,
+  workspaceTimerRouter,
+} from "../time-logs/time-logs.routes.js";
+import { taskHistoryRouter } from "../task-history/task-history.routes.js";
 import {
   acceptInvitation,
   applyModulePreset,
@@ -232,6 +238,19 @@ workspacesRouter.use(
   "/:workspaceId/tasks/:taskId/attachments",
   attachmentsRouter,
 );
+workspacesRouter.use(
+  "/:workspaceId/tasks/:taskId/dependencies",
+  dependenciesRouter,
+);
+workspacesRouter.use(
+  "/:workspaceId/tasks/:taskId/time-logs",
+  taskTimeLogsRouter,
+);
+workspacesRouter.use(
+  "/:workspaceId/tasks/:taskId/status-history",
+  taskHistoryRouter,
+);
+workspacesRouter.use("/:workspaceId/timers", workspaceTimerRouter);
 workspacesRouter.use("/:workspaceId/tags", tagsRouter);
 workspacesRouter.use("/:workspaceId/custom-fields", customFieldsRouter);
 workspacesRouter.use("/:workspaceId/projects", projectsRouter);

@@ -95,6 +95,22 @@ import {
   updateCommentSchema,
 } from "../modules/comments/comments.schemas.js";
 import { attachmentParamsSchema } from "../modules/attachments/attachments.schemas.js";
+import {
+  createDependencySchema,
+  dependencyParamsSchema,
+  dependencyTaskParamsSchema,
+} from "../modules/dependencies/dependencies.schemas.js";
+import {
+  createManualTimeLogSchema,
+  listTimeLogsQuerySchema,
+  startTimerSchema,
+  stopTimerSchema,
+  timeLogParamsSchema,
+  timeLogTaskParamsSchema,
+  updateTimeLogSchema,
+  workspaceTimerParamsSchema,
+} from "../modules/time-logs/time-logs.schemas.js";
+import { taskHistoryParamsSchema } from "../modules/task-history/task-history.schemas.js";
 
 extendZodWithOpenApi(z);
 
@@ -571,6 +587,128 @@ registry.registerPath({
   },
 });
 
+for (const endpoint of [
+  {
+    method: "get" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/dependencies",
+    tag: "Dependencies",
+    params: dependencyTaskParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Waiting-on and blocking task dependencies",
+  },
+  {
+    method: "post" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/dependencies",
+    tag: "Dependencies",
+    params: dependencyTaskParamsSchema,
+    query: undefined,
+    body: createDependencySchema,
+    description: "Directed dependency created after cycle validation",
+  },
+  {
+    method: "delete" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/dependencies/{dependencyId}",
+    tag: "Dependencies",
+    params: dependencyParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Task dependency removed",
+  },
+  {
+    method: "get" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/time-logs",
+    tag: "Time Tracking",
+    params: timeLogTaskParamsSchema,
+    query: listTimeLogsQuerySchema,
+    body: undefined,
+    description: "Own or team time logs and totals",
+  },
+  {
+    method: "post" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/time-logs",
+    tag: "Time Tracking",
+    params: timeLogTaskParamsSchema,
+    query: undefined,
+    body: createManualTimeLogSchema,
+    description: "Validated manual time log created",
+  },
+  {
+    method: "post" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/time-logs/timer/start",
+    tag: "Time Tracking",
+    params: timeLogTaskParamsSchema,
+    query: undefined,
+    body: startTimerSchema,
+    description: "Server-persisted workspace timer started",
+  },
+  {
+    method: "post" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/time-logs/timer/stop",
+    tag: "Time Tracking",
+    params: timeLogTaskParamsSchema,
+    query: undefined,
+    body: stopTimerSchema,
+    description: "Running timer stopped and duration calculated",
+  },
+  {
+    method: "patch" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/time-logs/{timeLogId}",
+    tag: "Time Tracking",
+    params: timeLogParamsSchema,
+    query: undefined,
+    body: updateTimeLogSchema,
+    description: "Time log updated after overlap validation",
+  },
+  {
+    method: "delete" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/time-logs/{timeLogId}",
+    tag: "Time Tracking",
+    params: timeLogParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Authorized time log deleted",
+  },
+  {
+    method: "get" as const,
+    path: "/api/v1/workspaces/{workspaceId}/timers/running",
+    tag: "Time Tracking",
+    params: workspaceTimerParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Current user's running workspace timer",
+  },
+  {
+    method: "get" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/status-history",
+    tag: "Task History",
+    params: taskHistoryParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Status timeline and duration aggregates",
+  },
+] as const) {
+  registry.registerPath({
+    method: endpoint.method,
+    path: endpoint.path,
+    tags: [endpoint.tag],
+    security: [{ bearerAuth: [] }],
+    request: {
+      params: endpoint.params,
+      ...(endpoint.query ? { query: endpoint.query } : {}),
+      ...(endpoint.body ? jsonBody(endpoint.body) : {}),
+    },
+    responses: {
+      200: { description: endpoint.description },
+      201: { description: endpoint.description },
+      400: { description: "Validation error" },
+      403: { description: "Forbidden" },
+      404: { description: "Not found" },
+      409: { description: "Dependency, timer, or overlap conflict" },
+    },
+  });
+}
+
 for (const lifecycle of ["archive", "unarchive", "restore"] as const) {
   registry.registerPath({
     method: "post",
@@ -1020,9 +1158,9 @@ export function buildOpenApiDocument() {
     openapi: "3.0.3",
     info: {
       title: "TaskMng SME API",
-      version: "7.1.0",
+      version: "7.2.0",
       description:
-        "Phase 7.1 Task Metadata & Collaboration API (checklist, tags, custom fields, comments, attachments)",
+        "Phase 7.2 API: task dependencies, policy-aware handoff, server time tracking, and stage history",
     },
     servers: [{ url: "http://localhost:4000" }],
   });

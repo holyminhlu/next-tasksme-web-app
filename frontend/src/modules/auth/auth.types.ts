@@ -174,4 +174,14 @@ export type PermissionKey =
   | "attachment.view"
   | "attachment.upload"
   | "attachment.delete_own"
-  | "attachment.manage";
+  | "attachment.manage"
+  | "task_dependency.view"
+  | "task_dependency.manage"
+  | "task_dependency.override"
+  | "time_log.view_own"
+  | "time_log.create"
+  | "time_log.update_own"
+  | "time_log.delete_own"
+  | "time_log.view_all"
+  | "time_log.manage_all"
+  | "task_history.view";

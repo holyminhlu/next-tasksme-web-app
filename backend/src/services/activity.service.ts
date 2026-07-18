@@ -39,6 +39,15 @@ export const ACTIVITY_ACTIONS = {
   COMMENT_DELETED: "task.comment_deleted",
   ATTACHMENT_UPLOADED: "task.attachment_uploaded",
   ATTACHMENT_DELETED: "task.attachment_deleted",
+  TASK_DEPENDENCY_CREATED: "task.dependency_created",
+  TASK_DEPENDENCY_DELETED: "task.dependency_deleted",
+  TASK_DEPENDENCY_OVERRIDDEN: "task.dependency_overridden",
+  TASK_UNBLOCKED: "task.unblocked",
+  TIME_LOG_CREATED: "task.time_log_created",
+  TIME_LOG_UPDATED: "task.time_log_updated",
+  TIME_LOG_DELETED: "task.time_log_deleted",
+  TIMER_STARTED: "task.timer_started",
+  TIMER_STOPPED: "task.timer_stopped",
   PROJECT_CREATED: "project.created",
 } as const;
 

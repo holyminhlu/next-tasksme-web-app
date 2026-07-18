@@ -28,6 +28,9 @@ export const updateWorkspaceSchema = z
     timezone: z.string().trim().min(2).max(64).optional(),
     locale: z.string().trim().min(2).max(16).optional(),
     logoUrl: z.string().url().max(500).nullable().optional(),
+    dependencyCompletionPolicy: z
+      .enum(["WARN_ONLY", "BLOCK", "BLOCK_WITH_OVERRIDE"])
+      .optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field is required",

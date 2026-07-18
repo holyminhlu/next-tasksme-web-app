@@ -21,9 +21,15 @@ export const notificationParamsSchema = z.object({
   notificationId: z.string().uuid(),
 });
 
-export const updateNotificationPreferenceSchema = z.object({
-  taskAssigned: z.boolean(),
-});
+export const updateNotificationPreferenceSchema = z
+  .object({
+    taskAssigned: z.boolean().optional(),
+    taskMentioned: z.boolean().optional(),
+    taskUnblocked: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one preference is required",
+  });
 
 export type ListNotificationsQuery = z.infer<typeof listNotificationsQuerySchema>;
 export type UpdateNotificationPreferenceInput = z.infer<

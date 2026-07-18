@@ -33,6 +33,7 @@ import {
   validateTaskDates,
 } from "../tasks.helpers";
 import * as tasksService from "../tasks.service";
+import * as workflowService from "../workflow.service";
 import { emitTasksChanged } from "../tasks.events";
 import type {
   CandidateOption,
@@ -45,6 +46,7 @@ import type {
 } from "../tasks.types";
 import { AssigneePicker } from "./AssigneePicker";
 import { TaskCollaborationPanels } from "./TaskCollaborationPanels";
+import { TaskWorkflowPanels } from "./TaskWorkflowPanels";
 import styles from "./task-ui.module.css";
 
 type EditFields = {
@@ -425,6 +427,11 @@ export function TaskDetailDialog({
       return;
     }
 
+    if (input.status === "DONE" && current.status !== "DONE") {
+      const canProceed = await applyDependencyCompletionPolicy(input);
+      if (!canProceed) return;
+    }
+
     setBusy(true);
     setError(null);
     setConflict(false);
@@ -462,6 +469,19 @@ export function TaskDetailDialog({
       return;
     }
 
+    const statusInput: {
+      status: TaskStatus;
+      version: number;
+      dependencyOverrideReason?: string;
+    } = { status, version: current.version };
+    if (
+      status === "DONE" &&
+      current.status !== "DONE" &&
+      !(await applyDependencyCompletionPolicy(statusInput))
+    ) {
+      return;
+    }
+
     setBusy(true);
     setError(null);
     setConflict(false);
@@ -469,7 +489,7 @@ export function TaskDetailDialog({
     const result = await tasksService.updateTaskStatus(
       selectedWorkspace.id,
       current.id,
-      { status, version: current.version },
+      statusInput,
     );
 
     setBusy(false);
@@ -492,6 +512,49 @@ export function TaskDetailDialog({
     setFields(editFieldsFromTask(result.data));
     onUpdated(result.data);
     emitTasksChanged();
+  }
+
+  async function applyDependencyCompletionPolicy(input: {
+    dependencyOverrideReason?: string;
+  }) {
+    if (!selectedWorkspace || !current) return false;
+    const result = await workflowService.listDependencies(
+      selectedWorkspace.id,
+      current.id,
+    );
+    if (!result.ok || !result.data.hasIncompletePredecessors) return true;
+
+    if (result.data.policy === "WARN_ONLY") {
+      toast({
+        title: "Unfinished dependencies",
+        description:
+          "This task still has unfinished predecessors. Workspace policy allows completion with a warning.",
+        tone: "info",
+      });
+      return true;
+    }
+    if (result.data.policy === "BLOCK") {
+      setError(
+        "This task cannot be completed until all predecessor tasks are done.",
+      );
+      return false;
+    }
+    if (!hasPermission(permissions, "task_dependency.override")) {
+      setError(
+        "This task requires a dependency override, but you do not have permission.",
+      );
+      return false;
+    }
+
+    const reason = window
+      .prompt("Reason for overriding unfinished dependencies")
+      ?.trim();
+    if (!reason || reason.length < 5) {
+      setError("An override reason of at least 5 characters is required.");
+      return false;
+    }
+    input.dependencyOverrideReason = reason;
+    return true;
   }
 
   async function handleArchive(archive: boolean) {
@@ -964,6 +1027,15 @@ export function TaskDetailDialog({
         </dl>
 
         <TaskCollaborationPanels task={current} members={workspaceMembers} />
+        <TaskWorkflowPanels
+          task={current}
+          onTaskUpdated={(updated) => {
+            setCurrent(updated);
+            setFields(editFieldsFromTask(updated));
+            onUpdated(updated);
+            emitTasksChanged();
+          }}
+        />
 
         <section className={styles.activitySection} aria-label="Activity">
           <h3 className={styles.activityTitle}>Activity</h3>

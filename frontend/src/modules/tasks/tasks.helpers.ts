@@ -431,6 +431,22 @@ export function mapTask(raw: unknown): TaskRecord | null {
       asBoolean(record.isBlocked) ??
       normalizeTaskStatus(record.status) === "BLOCKED",
     blockedReason: pick(record, ["blockedReason"], asNonEmptyString),
+    dependencyBlocked: asBoolean(record.dependencyBlocked) ?? false,
+    dependencyOverrideReason: pick(
+      record,
+      ["dependencyOverrideReason"],
+      asNonEmptyString,
+    ),
+    dependencyOverriddenById: pick(
+      record,
+      ["dependencyOverriddenById"],
+      asNonEmptyString,
+    ),
+    dependencyOverriddenAt: pick(
+      record,
+      ["dependencyOverriddenAt"],
+      asNonEmptyString,
+    ),
     source: pick(record, ["source"], asNonEmptyString),
     projectId:
       pick(record, ["projectId"], asNonEmptyString) ??
