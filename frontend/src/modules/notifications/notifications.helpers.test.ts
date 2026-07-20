@@ -55,13 +55,25 @@ describe("mapNotificationList", () => {
 });
 
 describe("mapNotificationPreference", () => {
+  const defaultPrefs = {
+    taskAssigned: true,
+    taskMentioned: true,
+    taskUnblocked: true,
+    recurrenceCreated: true,
+    recurrenceSkipped: true,
+    slaWarning: true,
+    slaBreached: true,
+    riskEscalated: true,
+  };
+
   it("reads taskAssigned from nested or flat payloads", () => {
     expect(mapNotificationPreference({ taskAssigned: false })).toEqual({
+      ...defaultPrefs,
       taskAssigned: false,
     });
     expect(
       mapNotificationPreference({ preferences: { taskAssigned: true } }),
-    ).toEqual({ taskAssigned: true });
+    ).toEqual(defaultPrefs);
   });
 });
 
