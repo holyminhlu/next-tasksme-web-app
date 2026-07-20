@@ -4,6 +4,7 @@ import { prisma } from "../src/config/database.js";
 import { computeNextRunAt } from "../src/lib/recurrence-schedule.js";
 import { calculateTaskRisk } from "../src/lib/risk-calculator.js";
 import { generateDueOccurrences } from "../src/modules/recurrences/recurrences.service.js";
+import { recalculateTaskRisk } from "../src/modules/risk/risk.service.js";
 import { processDueSlaNotifications } from "../src/modules/sla/sla.service.js";
 import { registerLoginAndCreateWorkspace } from "./helpers.js";
 
@@ -120,6 +121,176 @@ describe("phase 7.3 recurring tasks, risk, and SLA", () => {
       },
     }).catch((error: { code?: string }) => error);
     expect((duplicateAttempt as { code?: string }).code).toBe("P2002");
+  });
+
+  it("dedupes concurrent occurrence generation", async () => {
+    const { workspaceId, userId, createTask } = await setup("Concurrent Recurrence");
+    const template = await createTask("Concurrent template");
+    const now = new Date();
+    const scheduledAt = new Date(now.getTime() - 60_000);
+    const recurrence = await prisma.taskRecurrence.create({
+      data: {
+        workspaceId,
+        templateTaskId: template.id,
+        frequency: "DAILY",
+        interval: 1,
+        daysOfWeekJson: [],
+        timezone: "UTC",
+        startAt: scheduledAt,
+        nextRunAt: scheduledAt,
+        overlapPolicy: "CREATE_ANYWAY",
+        isActive: true,
+        createdById: userId,
+      },
+    });
+
+    const [first, second] = await Promise.all([
+      generateDueOccurrences(recurrence.id, now),
+      generateDueOccurrences(recurrence.id, now),
+    ]);
+    const statuses = [first?.status, second?.status].filter(Boolean);
+    expect(statuses.filter((status) => status === "CREATED").length).toBe(1);
+    const count = await prisma.recurringTaskOccurrence.count({
+      where: { recurrenceId: recurrence.id, scheduledAt },
+    });
+    expect(count).toBe(1);
+  });
+
+  it("notifies assignee for CREATE_AND_NOTIFY overlap policy", async () => {
+    const { owner, workspaceId, userId, createTask } = await setup("Create And Notify");
+    const template = await createTask("Notify template");
+    await prisma.task.update({
+      where: { id: template.id },
+      data: { assigneeId: userId },
+    });
+    const now = new Date();
+    const scheduledAt = new Date(now.getTime() - 60_000);
+    const recurrence = await prisma.taskRecurrence.create({
+      data: {
+        workspaceId,
+        templateTaskId: template.id,
+        frequency: "DAILY",
+        interval: 1,
+        daysOfWeekJson: [],
+        timezone: "UTC",
+        startAt: scheduledAt,
+        nextRunAt: scheduledAt,
+        overlapPolicy: "CREATE_AND_NOTIFY",
+        isActive: true,
+        createdById: userId,
+      },
+    });
+
+    const occurrence = await generateDueOccurrences(recurrence.id, now);
+    expect(occurrence?.status).toBe("CREATED");
+
+    const notifications = await prisma.notification.findMany({
+      where: { workspaceId, userId, type: "RECURRENCE_CREATED" },
+    });
+    expect(notifications.length).toBeGreaterThan(0);
+  });
+
+  it("emits RECURRENCE_SKIPPED notification for SKIP_IF_OPEN", async () => {
+    const { workspaceId, userId, createTask } = await setup("Skipped Notify");
+    const template = await createTask("Skipped template");
+    await prisma.task.update({
+      where: { id: template.id },
+      data: { assigneeId: userId },
+    });
+    const now = new Date();
+    const scheduledAt = new Date(now.getTime() - 60_000);
+    const recurrence = await prisma.taskRecurrence.create({
+      data: {
+        workspaceId,
+        templateTaskId: template.id,
+        frequency: "DAILY",
+        interval: 1,
+        daysOfWeekJson: [],
+        timezone: "UTC",
+        startAt: scheduledAt,
+        nextRunAt: scheduledAt,
+        overlapPolicy: "SKIP_IF_OPEN",
+        isActive: true,
+        createdById: userId,
+      },
+    });
+
+    await generateDueOccurrences(recurrence.id, now);
+    await prisma.taskRecurrence.update({
+      where: { id: recurrence.id },
+      data: { nextRunAt: new Date(now.getTime() - 30_000) },
+    });
+    await generateDueOccurrences(recurrence.id, now);
+
+    const skipped = await prisma.notification.count({
+      where: { workspaceId, userId, type: "RECURRENCE_SKIPPED" },
+    });
+    expect(skipped).toBe(1);
+  });
+
+  it("marks SLA instances MET when task is completed", async () => {
+    const { owner, workspaceId, tasksBase, createTask } = await setup("SLA Met");
+    const auth = { Authorization: `Bearer ${owner.accessToken}` };
+    const task = await createTask("Complete for SLA");
+
+    await request(owner.app)
+      .patch(`/api/v1/workspaces/${workspaceId}/modules`)
+      .set(auth)
+      .send({ modules: [{ moduleKey: "sla", enabled: true }] })
+      .expect(200);
+
+    const policy = await prisma.slaPolicy.create({
+      data: {
+        workspaceId,
+        createdById: owner.userId as string,
+        name: "Test policy",
+        targetDurationMinutes: 120,
+        warningBeforeMinutes: 30,
+      },
+    });
+    const instance = await prisma.taskSlaInstance.create({
+      data: {
+        workspaceId,
+        taskId: task.id,
+        policyId: policy.id,
+        startedAt: new Date(),
+        dueAt: new Date(Date.now() + 3_600_000),
+        status: "ACTIVE",
+      },
+    });
+
+    await request(owner.app)
+      .patch(`${tasksBase}/${task.id}`)
+      .set(auth)
+      .send({ status: "DONE", version: task.version })
+      .expect(200);
+
+    const refreshed = await prisma.taskSlaInstance.findUniqueOrThrow({
+      where: { id: instance.id },
+    });
+    expect(refreshed.status).toBe("MET");
+  });
+
+  it("emits RISK_ESCALATED when risk level increases", async () => {
+    const { workspaceId, userId, createTask } = await setup("Risk Escalation");
+    const task = await createTask("Escalating risk");
+    await prisma.task.update({
+      where: { id: task.id },
+      data: {
+        assigneeId: userId,
+        dueDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        riskLevel: "LOW",
+        riskScore: 5,
+        riskRecalculateAt: new Date(),
+      },
+    });
+
+    await recalculateTaskRisk(task.id);
+
+    const escalated = await prisma.notification.count({
+      where: { workspaceId, userId, taskId: task.id, type: "RISK_ESCALATED" },
+    });
+    expect(escalated).toBeGreaterThan(0);
   });
 
   it("returns explainable risk reasons and stays workspace scoped", async () => {

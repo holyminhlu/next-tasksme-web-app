@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addBusinessMinutes, isWorkingDay, subtractBusinessMinutes } from "../src/lib/business-time.js";
+import { addBusinessMinutes, businessMinutesBetween, isWorkingDay, subtractBusinessMinutes } from "../src/lib/business-time.js";
 
 const calendar = {
   timezone: "UTC",
@@ -27,5 +27,22 @@ describe("business time", () => {
         calendar,
       ).toISOString(),
     ).toBe("2026-07-17T16:00:00.000Z");
+  });
+
+  it("counts business minutes between instants", () => {
+    expect(
+      businessMinutesBetween(
+        new Date("2026-07-17T16:00:00.000Z"),
+        new Date("2026-07-21T10:00:00.000Z"),
+        calendar,
+      ),
+    ).toBe(120);
+    expect(
+      businessMinutesBetween(
+        new Date("2026-07-17T16:00:00.000Z"),
+        new Date("2026-07-20T12:00:00.000Z"),
+        calendar,
+      ),
+    ).toBe(60);
   });
 });

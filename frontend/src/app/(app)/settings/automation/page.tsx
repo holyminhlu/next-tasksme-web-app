@@ -70,6 +70,9 @@ export default function AutomationSettingsPage() {
   const [targetMinutes, setTargetMinutes] = useState(480);
   const [warningMinutes, setWarningMinutes] = useState(60);
   const [policyCalendarId, setPolicyCalendarId] = useState("");
+  const [selectedCalendarId, setSelectedCalendarId] = useState("");
+  const [holidayDate, setHolidayDate] = useState("");
+  const [holidayName, setHolidayName] = useState("");
 
   const load = useCallback(async () => {
     if (!workspaceId || !canView) return;
@@ -89,7 +92,10 @@ export default function AutomationSettingsPage() {
       ]);
       if (calResult.ok) {
         setCalendars(calResult.data);
-        if (calResult.data[0]) setPolicyCalendarId(calResult.data[0].id);
+        if (calResult.data[0]) {
+          setPolicyCalendarId(calResult.data[0].id);
+          setSelectedCalendarId(calResult.data[0].id);
+        }
       }
       if (policyResult.ok) setPolicies(policyResult.data);
     }
@@ -149,6 +155,55 @@ export default function AutomationSettingsPage() {
       return;
     }
     toast({ title: "Business calendar created", tone: "success" });
+    await load();
+  }
+
+  async function addHoliday() {
+    if (!workspaceId || !canConfigureSla || !selectedCalendarId || !holidayDate || !holidayName) {
+      return;
+    }
+    const calendar = calendars.find((item) => item.id === selectedCalendarId);
+    if (!calendar) return;
+    setBusy(true);
+    const result = await automation.updateBusinessCalendar(workspaceId, selectedCalendarId, {
+      holidays: [
+        ...calendar.holidays,
+        { date: holidayDate, name: holidayName, isWorking: false },
+      ],
+    });
+    setBusy(false);
+    if (!result.ok) {
+      toast({
+        title: "Couldn't add holiday",
+        description: result.message,
+        tone: "error",
+      });
+      return;
+    }
+    setHolidayDate("");
+    setHolidayName("");
+    toast({ title: "Holiday added", tone: "success" });
+    await load();
+  }
+
+  async function removeHoliday(calendarId: string, date: string) {
+    if (!workspaceId || !canConfigureSla) return;
+    const calendar = calendars.find((item) => item.id === calendarId);
+    if (!calendar) return;
+    setBusy(true);
+    const result = await automation.updateBusinessCalendar(workspaceId, calendarId, {
+      holidays: calendar.holidays.filter((holiday) => holiday.date !== date),
+    });
+    setBusy(false);
+    if (!result.ok) {
+      toast({
+        title: "Couldn't remove holiday",
+        description: result.message,
+        tone: "error",
+      });
+      return;
+    }
+    toast({ title: "Holiday removed", tone: "success" });
     await load();
   }
 
@@ -319,10 +374,36 @@ export default function AutomationSettingsPage() {
             <div>
               <h3 className={styles.cardTitle}>Business calendars</h3>
               {calendars.map((calendar) => (
-                <p key={calendar.id} className={styles.muted}>
-                  {calendar.name} · {calendar.timezone}
-                  {calendar.isDefault ? " (default)" : ""}
-                </p>
+                <div key={calendar.id}>
+                  <p className={styles.muted}>
+                    {calendar.name} · {calendar.timezone}
+                    {calendar.isDefault ? " (default)" : ""}
+                  </p>
+                  {calendar.holidays.length > 0 && (
+                    <ul className={styles.muted}>
+                      {calendar.holidays.map((holiday) => (
+                        <li key={`${calendar.id}-${holiday.date}`}>
+                          {holiday.date}: {holiday.name}
+                          {canConfigureSla && (
+                            <>
+                              {" "}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={() =>
+                                  void removeHoliday(calendar.id, holiday.date)
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               ))}
               {calendars.length === 0 && (
                 <p className={styles.muted}>No calendars yet.</p>
@@ -352,6 +433,51 @@ export default function AutomationSettingsPage() {
                       Create Mon–Fri 09:00–17:00 calendar
                     </Button>
                   </div>
+                  {calendars.length > 0 && (
+                    <>
+                      <FormField label="Calendar for holidays">
+                        {(props) => (
+                          <Select
+                            {...props}
+                            value={selectedCalendarId}
+                            onChange={(event) =>
+                              setSelectedCalendarId(event.target.value)
+                            }
+                          >
+                            {calendars.map((calendar) => (
+                              <option key={calendar.id} value={calendar.id}>
+                                {calendar.name}
+                              </option>
+                            ))}
+                          </Select>
+                        )}
+                      </FormField>
+                      <FormField label="Holiday date">
+                        {(props) => (
+                          <TextInput
+                            {...props}
+                            type="date"
+                            value={holidayDate}
+                            onChange={(event) => setHolidayDate(event.target.value)}
+                          />
+                        )}
+                      </FormField>
+                      <FormField label="Holiday name">
+                        {(props) => (
+                          <TextInput
+                            {...props}
+                            value={holidayName}
+                            onChange={(event) => setHolidayName(event.target.value)}
+                          />
+                        )}
+                      </FormField>
+                      <div className={styles.formActions}>
+                        <Button disabled={busy} onClick={() => void addHoliday()}>
+                          Add holiday
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

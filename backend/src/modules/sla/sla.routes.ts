@@ -90,6 +90,7 @@ for (const method of ["patch", "put"] as const) {
           await slaService.updatePolicy(
             String(req.params.workspaceId),
             String(req.params.policyId),
+            actorFromRequest(req).userId,
             data,
           ),
         );
@@ -111,6 +112,7 @@ slaPoliciesRouter.delete(
         await slaService.deletePolicy(
           String(req.params.workspaceId),
           String(req.params.policyId),
+          actorFromRequest(req).userId,
         ),
       );
     } catch (error) {

@@ -26,7 +26,7 @@ import {
   assertCompletionAllowed,
   recordTaskStatusTransition,
 } from "../../services/task-transitions.service.js";
-import { initializeTaskSla } from "../sla/sla.service.js";
+import { initializeTaskSla, finalizeTaskSlaOnStatusChange } from "../sla/sla.service.js";
 import { parseTaskText as parseTaskDraft } from "./parse.service.js";
 import {
   buildTaskListWhere,
@@ -1045,6 +1045,9 @@ export class TasksService {
       return { task: updated, unblocked };
     });
     const { task, unblocked } = transactionResult;
+    if (statusChanged && (nextStatus === "DONE" || nextStatus === "CANCELLED")) {
+      await finalizeTaskSlaOnStatusChange(task.id, nextStatus, transitionAt);
+    }
     const action = enteringDone
       ? "task.completed"
       : assignmentChanged

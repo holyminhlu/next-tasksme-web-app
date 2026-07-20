@@ -27,4 +27,11 @@ export type NotificationListFilters = {
 
 export type NotificationPreference = {
   taskAssigned: boolean;
+  taskMentioned?: boolean;
+  taskUnblocked?: boolean;
+  recurrenceCreated?: boolean;
+  recurrenceSkipped?: boolean;
+  slaWarning?: boolean;
+  slaBreached?: boolean;
+  riskEscalated?: boolean;
 };

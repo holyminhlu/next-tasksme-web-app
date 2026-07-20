@@ -1,11 +1,13 @@
-import type { Prisma, Task } from "../../../generated/prisma/client.js";
+import type { Prisma, Task, TaskStatus } from "../../../generated/prisma/client.js";
 import { prisma } from "../../config/database.js";
 import {
   addBusinessMinutes,
+  businessMinutesBetween,
   subtractBusinessMinutes,
   type BusinessCalendarInput,
 } from "../../lib/business-time.js";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { writeAuditLog } from "../../services/audit.service.js";
 
 export async function assertSlaEnabled(workspaceId: string): Promise<void> {
   const module = await prisma.workspaceModule.findUnique({
@@ -83,6 +85,26 @@ export async function initializeTaskSla(task: Pick<Task, "id" | "workspaceId" | 
     );
   }
   return created;
+}
+
+export async function finalizeTaskSlaOnStatusChange(
+  taskId: string,
+  status: TaskStatus,
+  now = new Date(),
+) {
+  if (status !== "DONE" && status !== "CANCELLED") return;
+  const targetStatus = status === "DONE" ? "MET" : "CANCELLED";
+  await prisma.taskSlaInstance.updateMany({
+    where: {
+      taskId,
+      status: { in: ["ACTIVE", "PAUSED"] },
+    },
+    data: {
+      status: targetStatus,
+      pausedAt: null,
+      updatedAt: now,
+    },
+  });
 }
 
 async function notifySla(instanceId: string, kind: "warning" | "breach", now = new Date()) {
@@ -170,7 +192,7 @@ export class SlaService {
     },
   ) {
     await assertSlaEnabled(workspaceId);
-    return prisma.slaPolicy.create({
+    const policy = await prisma.slaPolicy.create({
       data: {
         workspaceId,
         createdById: userId,
@@ -182,19 +204,48 @@ export class SlaService {
         isActive: input.isActive ?? true,
       },
     });
+    await writeAuditLog({
+      action: "sla_policy.created",
+      userId,
+      workspaceId,
+      entityType: "sla_policy",
+      entityId: policy.id,
+      metadata: { name: policy.name },
+    });
+    return policy;
   }
 
-  async updatePolicy(workspaceId: string, id: string, input: Prisma.SlaPolicyUpdateInput) {
+  async updatePolicy(
+    workspaceId: string,
+    id: string,
+    userId: string,
+    input: Prisma.SlaPolicyUpdateInput,
+  ) {
     await assertSlaEnabled(workspaceId);
     const policy = await prisma.slaPolicy.findFirst({ where: { id, workspaceId } });
     if (!policy) throw new NotFoundError("SLA policy not found");
-    return prisma.slaPolicy.update({ where: { id }, data: input });
+    const updated = await prisma.slaPolicy.update({ where: { id }, data: input });
+    await writeAuditLog({
+      action: "sla_policy.updated",
+      userId,
+      workspaceId,
+      entityType: "sla_policy",
+      entityId: id,
+    });
+    return updated;
   }
 
-  async deletePolicy(workspaceId: string, id: string) {
+  async deletePolicy(workspaceId: string, id: string, userId: string) {
     await assertSlaEnabled(workspaceId);
     const result = await prisma.slaPolicy.deleteMany({ where: { id, workspaceId } });
     if (!result.count) throw new NotFoundError("SLA policy not found");
+    await writeAuditLog({
+      action: "sla_policy.deleted",
+      userId,
+      workspaceId,
+      entityType: "sla_policy",
+      entityId: id,
+    });
     return { deleted: true };
   }
 
@@ -240,19 +291,54 @@ export class SlaService {
     await assertSlaEnabled(workspaceId);
     const instance = await prisma.taskSlaInstance.findFirst({
       where: { id, workspaceId, status: "PAUSED", pausedAt: { not: null } },
+      include: {
+        policy: {
+          include: {
+            businessCalendar: { include: { workingHours: true, holidays: true } },
+          },
+        },
+      },
     });
     if (!instance || !instance.pausedAt) throw new NotFoundError("Paused SLA instance not found");
-    const pausedSeconds = Math.max(0, Math.floor((Date.now() - instance.pausedAt.getTime()) / 1000));
+    const resumedAt = new Date();
+    const calendar = instance.policy.businessCalendar
+      ? calendarInput(instance.policy.businessCalendar)
+      : null;
+    const remainingDueMinutes = calendar
+      ? businessMinutesBetween(instance.pausedAt, instance.dueAt, calendar)
+      : Math.max(
+          0,
+          Math.ceil((instance.dueAt.getTime() - instance.pausedAt.getTime()) / 60_000),
+        );
+    const remainingWarningMinutes =
+      instance.warningAt && calendar
+        ? businessMinutesBetween(instance.pausedAt, instance.warningAt, calendar)
+        : instance.warningAt
+          ? Math.max(
+              0,
+              Math.ceil((instance.warningAt.getTime() - instance.pausedAt.getTime()) / 60_000),
+            )
+          : null;
+    const pausedSeconds = calendar
+      ? businessMinutesBetween(instance.pausedAt, resumedAt, calendar) * 60
+      : Math.max(0, Math.floor((resumedAt.getTime() - instance.pausedAt.getTime()) / 1000));
+    const dueAt = calendar
+      ? addBusinessMinutes(resumedAt, remainingDueMinutes, calendar)
+      : new Date(resumedAt.getTime() + remainingDueMinutes * 60_000);
+    const warningAt =
+      remainingWarningMinutes === null
+        ? null
+        : calendar
+          ? addBusinessMinutes(resumedAt, remainingWarningMinutes, calendar)
+          : new Date(resumedAt.getTime() + remainingWarningMinutes * 60_000);
     return prisma.taskSlaInstance.update({
       where: { id },
       data: {
         status: "ACTIVE",
         pausedAt: null,
         totalPausedSeconds: { increment: pausedSeconds },
-        dueAt: new Date(instance.dueAt.getTime() + pausedSeconds * 1000),
-        warningAt: instance.warningAt
-          ? new Date(instance.warningAt.getTime() + pausedSeconds * 1000)
-          : null,
+        dueAt,
+        warningAt,
       },
     });
   }

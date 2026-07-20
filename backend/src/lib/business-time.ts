@@ -93,6 +93,35 @@ export function addBusinessMinutes(
   throw new RangeError("Unable to find business time within 100 years");
 }
 
+export function businessMinutesBetween(
+  from: Date,
+  to: Date,
+  calendar: BusinessCalendarInput,
+): number {
+  if (to.getTime() <= from.getTime()) return 0;
+  let total = 0;
+  let cursor = Temporal.Instant.from(from.toISOString()).toZonedDateTimeISO(calendar.timezone);
+  const end = Temporal.Instant.from(to.toISOString()).toZonedDateTimeISO(calendar.timezone);
+
+  for (let guard = 0; guard < 36600; guard += 1) {
+    if (Temporal.ZonedDateTime.compare(cursor, end) >= 0) break;
+    const hours = getWorkingHoursForDay(cursor.toPlainDate(), calendar);
+    if (hours) {
+      const start = atMinute(cursor.toPlainDate(), hours.startMinute, calendar.timezone);
+      const dayEnd = atMinute(cursor.toPlainDate(), hours.endMinute, calendar.timezone);
+      const windowStart = Temporal.ZonedDateTime.compare(cursor, start) < 0 ? start : cursor;
+      const windowEnd = Temporal.ZonedDateTime.compare(end, dayEnd) < 0 ? end : dayEnd;
+      if (Temporal.ZonedDateTime.compare(windowStart, windowEnd) < 0) {
+        total += Math.floor(windowStart.until(windowEnd).total({ unit: "minutes" }));
+      }
+    }
+    const nextDay = cursor.toPlainDate().add({ days: 1 }).toPlainDateTime().toZonedDateTime(calendar.timezone);
+    if (Temporal.ZonedDateTime.compare(nextDay, end) >= 0) break;
+    cursor = nextDay;
+  }
+  return total;
+}
+
 export function subtractBusinessMinutes(
   from: Date,
   minutes: number,

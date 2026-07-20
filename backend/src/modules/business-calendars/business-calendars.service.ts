@@ -2,6 +2,7 @@ import type { Prisma } from "../../../generated/prisma/client.js";
 import { prisma } from "../../config/database.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { assertSlaEnabled } from "../sla/sla.service.js";
+import { writeAuditLog } from "../../services/audit.service.js";
 
 export type BusinessCalendarMutation = {
   name: string;
@@ -62,10 +63,20 @@ export class BusinessCalendarsService {
         },
         include,
       });
+    }).then(async (calendar) => {
+      await writeAuditLog({
+        action: "business_calendar.created",
+        userId,
+        workspaceId,
+        entityType: "business_calendar",
+        entityId: calendar.id,
+        metadata: { name: calendar.name },
+      });
+      return calendar;
     });
   }
 
-  async update(workspaceId: string, id: string, input: Partial<BusinessCalendarMutation>) {
+  async update(workspaceId: string, id: string, userId: string, input: Partial<BusinessCalendarMutation>) {
     await this.get(workspaceId, id);
     return prisma.$transaction(async (tx) => {
       if (input.isDefault) {
@@ -98,12 +109,28 @@ export class BusinessCalendarsService {
         },
         include,
       });
+    }).then(async (calendar) => {
+      await writeAuditLog({
+        action: "business_calendar.updated",
+        userId,
+        workspaceId,
+        entityType: "business_calendar",
+        entityId: id,
+      });
+      return calendar;
     });
   }
 
-  async remove(workspaceId: string, id: string) {
+  async remove(workspaceId: string, id: string, userId: string) {
     await this.get(workspaceId, id);
     await prisma.businessCalendar.delete({ where: { id } });
+    await writeAuditLog({
+      action: "business_calendar.deleted",
+      userId,
+      workspaceId,
+      entityType: "business_calendar",
+      entityId: id,
+    });
     return { deleted: true };
   }
 }

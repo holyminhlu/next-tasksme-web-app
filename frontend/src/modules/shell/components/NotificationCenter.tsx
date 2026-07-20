@@ -15,11 +15,26 @@ import { useShell } from "../ShellProvider";
 import styles from "./NotificationCenter.module.css";
 
 function typeLabel(type: string): string {
-  if (type === "TASK_ASSIGNED") {
-    return "Assignment";
+  switch (type) {
+    case "TASK_ASSIGNED":
+      return "Assignment";
+    case "TASK_MENTIONED":
+      return "Mention";
+    case "TASK_UNBLOCKED":
+      return "Unblocked";
+    case "RECURRENCE_CREATED":
+      return "Recurrence";
+    case "RECURRENCE_SKIPPED":
+      return "Recurrence skipped";
+    case "SLA_WARNING":
+      return "SLA warning";
+    case "SLA_BREACHED":
+      return "SLA breached";
+    case "RISK_ESCALATED":
+      return "Risk escalated";
+    default:
+      return "Notice";
   }
-
-  return "Notice";
 }
 
 export function NotificationList({

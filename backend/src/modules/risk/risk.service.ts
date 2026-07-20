@@ -2,7 +2,49 @@ import type { Prisma, RiskLevel } from "../../../generated/prisma/client.js";
 import { prisma } from "../../config/database.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { calculateTaskRisk } from "../../lib/risk-calculator.js";
+import { writeAuditLog } from "../../services/audit.service.js";
 import { getVisibleTask, type TaskActor } from "../tasks/task-access.js";
+
+const RISK_RANK: Record<RiskLevel, number> = {
+  LOW: 0,
+  MEDIUM: 1,
+  HIGH: 2,
+  CRITICAL: 3,
+};
+
+async function notifyRiskEscalation(
+  task: {
+    id: string;
+    workspaceId: string;
+    title: string;
+    assigneeId: string | null;
+    createdById: string | null;
+  },
+  previousLevel: RiskLevel | null,
+  nextLevel: RiskLevel,
+) {
+  if (!previousLevel || RISK_RANK[nextLevel] <= RISK_RANK[previousLevel]) return;
+  const userId = task.assigneeId ?? task.createdById;
+  if (!userId) return;
+  const preference = await prisma.notificationPreference.findUnique({
+    where: { workspaceId_userId: { workspaceId: task.workspaceId, userId } },
+  });
+  if (preference?.riskEscalated === false) return;
+  const dedupeKey = `risk-escalated:${task.id}:${nextLevel}`;
+  await prisma.notification.upsert({
+    where: { dedupeKey },
+    update: {},
+    create: {
+      workspaceId: task.workspaceId,
+      userId,
+      taskId: task.id,
+      type: "RISK_ESCALATED",
+      title: `Risk escalated to ${nextLevel}: ${task.title}`,
+      body: `Risk increased from ${previousLevel} to ${nextLevel}.`,
+      dedupeKey,
+    },
+  });
+}
 
 export async function recalculateTaskRisk(taskId: string, now = new Date()) {
   const task = await prisma.task.findUnique({
@@ -35,6 +77,7 @@ export async function recalculateTaskRisk(taskId: string, now = new Date()) {
     now,
   );
   const level = task.manualRiskLevel ?? result.level;
+  const previousLevel = task.riskLevel;
   await prisma.$transaction([
     prisma.task.update({
       where: { id: task.id },
@@ -56,6 +99,17 @@ export async function recalculateTaskRisk(taskId: string, now = new Date()) {
       },
     }),
   ]);
+  await notifyRiskEscalation(
+    {
+      id: task.id,
+      workspaceId: task.workspaceId,
+      title: task.title,
+      assigneeId: task.assigneeId,
+      createdById: task.createdById,
+    },
+    previousLevel,
+    level,
+  );
   return { ...result, level, manualRiskLevel: task.manualRiskLevel };
 }
 
@@ -170,6 +224,14 @@ export class RiskService {
     await prisma.task.updateMany({
       where: { workspaceId, deletedAt: null },
       data: { riskRecalculateAt: new Date() },
+    });
+    await writeAuditLog({
+      action: "risk_rule.upserted",
+      userId,
+      workspaceId,
+      entityType: "risk_rule",
+      entityId: rule.id,
+      metadata: { name: rule.name },
     });
     return {
       id: rule.id,

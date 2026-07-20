@@ -61,9 +61,10 @@ const endpoint =
                 ? await businessCalendarsService.update(
                     workspaceId,
                     id,
+                    actor.userId,
                     req.body as Partial<BusinessCalendarMutation>,
                   )
-                : await businessCalendarsService.remove(workspaceId, id);
+                : await businessCalendarsService.remove(workspaceId, id, actor.userId);
       sendSuccess(res, data, { statusCode: action === "create" ? 201 : 200 });
     } catch (error) {
       next(error);

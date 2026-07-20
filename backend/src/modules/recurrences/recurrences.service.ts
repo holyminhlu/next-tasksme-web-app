@@ -8,6 +8,7 @@ import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { computeNextRunAt, previewNextRuns } from "../../lib/recurrence-schedule.js";
 import { OPEN_TASK_STATUSES } from "../../lib/task-scope.js";
 import { recordActivity } from "../../services/activity.service.js";
+import { writeAuditLog } from "../../services/audit.service.js";
 import { createTaskFromFactory } from "../../services/task-factory.service.js";
 import { upsertAutomationRun } from "../automation/automation-runs.service.js";
 import { getVisibleTask, type TaskActor } from "../tasks/task-access.js";
@@ -145,6 +146,14 @@ export class RecurrencesService {
       summary: `${existing ? "Updated" : "Created"} task recurrence`,
       metadata: { recurrenceId: recurrence.id, nextRunAt: recurrence.nextRunAt?.toISOString() },
     });
+    await writeAuditLog({
+      action: existing ? "task_recurrence.updated" : "task_recurrence.created",
+      userId: actor.userId,
+      workspaceId,
+      entityType: "task_recurrence",
+      entityId: recurrence.id,
+      metadata: { templateTaskId: taskId },
+    });
     return mapRecurrence(recurrence);
   }
 
@@ -155,6 +164,14 @@ export class RecurrencesService {
     });
     if (!recurrence) throw new NotFoundError("Task recurrence not found");
     await prisma.taskRecurrence.delete({ where: { id: recurrence.id } });
+    await writeAuditLog({
+      action: "task_recurrence.deleted",
+      userId: actor.userId,
+      workspaceId,
+      entityType: "task_recurrence",
+      entityId: recurrence.id,
+      metadata: { templateTaskId: taskId },
+    });
     return { ok: true as const };
   }
 
@@ -181,6 +198,14 @@ export class RecurrencesService {
       where: { id: recurrence.id },
       data: { isActive: false, nextRunAt: null },
     });
+    await writeAuditLog({
+      action: "task_recurrence.paused",
+      userId: actor.userId,
+      workspaceId,
+      entityType: "task_recurrence",
+      entityId: recurrence.id,
+      metadata: { templateTaskId: taskId },
+    });
     return mapRecurrence(updated);
   }
 
@@ -196,6 +221,14 @@ export class RecurrencesService {
         isActive: true,
         nextRunAt: computeNextRunAt(scheduleOf(recurrence), new Date()),
       },
+    });
+    await writeAuditLog({
+      action: "task_recurrence.resumed",
+      userId: actor.userId,
+      workspaceId,
+      entityType: "task_recurrence",
+      entityId: recurrence.id,
+      metadata: { templateTaskId: taskId },
     });
     return mapRecurrence(updated);
   }
@@ -256,6 +289,32 @@ export async function generateDueOccurrences(recurrenceId: string, now = new Dat
       where: { id: run.id },
       data: { status: "SKIPPED", completedAt: new Date(), resultJson: { reason: "open_occurrence" } },
     });
+    const notifyUserId =
+      recurrence.templateTask.assigneeId ??
+      recurrence.createdById ??
+      recurrence.templateTask.createdById;
+    if (notifyUserId) {
+      const preference = await prisma.notificationPreference.findUnique({
+        where: {
+          workspaceId_userId: { workspaceId: recurrence.workspaceId, userId: notifyUserId },
+        },
+      });
+      if (preference?.recurrenceSkipped !== false) {
+        await prisma.notification.upsert({
+          where: { dedupeKey: `recurrence-skipped:${occurrence.id}:${notifyUserId}` },
+          update: {},
+          create: {
+            workspaceId: recurrence.workspaceId,
+            userId: notifyUserId,
+            taskId: recurrence.templateTaskId,
+            type: "RECURRENCE_SKIPPED",
+            title: `Recurring task skipped: ${recurrence.templateTask.title}`,
+            body: "An earlier occurrence is still open.",
+            dedupeKey: `recurrence-skipped:${occurrence.id}:${notifyUserId}`,
+          },
+        });
+      }
+    }
     return occurrence;
   }
 
