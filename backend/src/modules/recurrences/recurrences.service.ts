@@ -4,7 +4,7 @@ import type {
   RecurrenceOverlapPolicy,
 } from "../../../generated/prisma/client.js";
 import { prisma } from "../../config/database.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { NotFoundError } from "../../lib/errors.js";
 import { computeNextRunAt, previewNextRuns } from "../../lib/recurrence-schedule.js";
 import { OPEN_TASK_STATUSES } from "../../lib/task-scope.js";
 import { recordActivity } from "../../services/activity.service.js";

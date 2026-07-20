@@ -83,7 +83,7 @@ describe("phase 7.3 recurring tasks, risk, and SLA", () => {
   });
 
   it("applies SKIP_IF_OPEN and unique occurrence constraint", async () => {
-    const { owner, workspaceId, userId, createTask } = await setup("Overlap Policy");
+    const { workspaceId, userId, createTask } = await setup("Overlap Policy");
     const template = await createTask("Open template");
     const now = new Date();
     const scheduledAt = new Date(now.getTime() - 60_000);
@@ -157,7 +157,7 @@ describe("phase 7.3 recurring tasks, risk, and SLA", () => {
   });
 
   it("notifies assignee for CREATE_AND_NOTIFY overlap policy", async () => {
-    const { owner, workspaceId, userId, createTask } = await setup("Create And Notify");
+    const { workspaceId, userId, createTask } = await setup("Create And Notify");
     const template = await createTask("Notify template");
     await prisma.task.update({
       where: { id: template.id },
@@ -332,7 +332,7 @@ describe("phase 7.3 recurring tasks, risk, and SLA", () => {
   });
 
   it("gates SLA behind module enablement and does not force Personal SLA", async () => {
-    const { owner, workspaceId, tasksBase, createTask } = await setup("SLA Gate");
+    const { owner, workspaceId, createTask } = await setup("SLA Gate");
     const auth = { Authorization: `Bearer ${owner.accessToken}` };
     const task = await createTask("SLA candidate", { priority: "URGENT" });
 
