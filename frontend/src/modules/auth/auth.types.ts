@@ -184,4 +184,15 @@ export type PermissionKey =
   | "time_log.delete_own"
   | "time_log.view_all"
   | "time_log.manage_all"
-  | "task_history.view";
+  | "task_history.view"
+  | "recurrence.view"
+  | "recurrence.manage"
+  | "risk.view"
+  | "risk.update"
+  | "risk.configure"
+  | "sla.view"
+  | "sla.configure"
+  | "sla.override"
+  | "automation.view"
+  | "automation.manage"
+  | "automation.retry";

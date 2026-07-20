@@ -49,6 +49,16 @@ beforeEach(async () => {
   await prisma.activityEvent.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.notificationPreference.deleteMany();
+  await prisma.automationRun.deleteMany();
+  await prisma.taskSlaInstance.deleteMany();
+  await prisma.slaPolicy.deleteMany();
+  await prisma.holiday.deleteMany();
+  await prisma.workingHours.deleteMany();
+  await prisma.businessCalendar.deleteMany();
+  await prisma.taskRiskSnapshot.deleteMany();
+  await prisma.riskRule.deleteMany();
+  await prisma.recurringTaskOccurrence.deleteMany();
+  await prisma.taskRecurrence.deleteMany();
   await prisma.taskStatusHistory.deleteMany();
   await prisma.timeLog.deleteMany();
   await prisma.taskDependency.deleteMany();

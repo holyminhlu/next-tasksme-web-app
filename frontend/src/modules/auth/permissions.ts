@@ -61,6 +61,29 @@ const PHASE_72_MEMBER: PermissionKey[] = [
   "task_history.view",
 ];
 
+const PHASE_73_FULL: PermissionKey[] = [
+  "recurrence.view",
+  "recurrence.manage",
+  "risk.view",
+  "risk.update",
+  "risk.configure",
+  "sla.view",
+  "sla.configure",
+  "sla.override",
+  "automation.view",
+  "automation.manage",
+  "automation.retry",
+];
+
+const PHASE_73_MEMBER: PermissionKey[] = [
+  "recurrence.view",
+  "recurrence.manage",
+  "risk.view",
+  "risk.update",
+  "sla.view",
+  "automation.view",
+];
+
 // Mirrors backend ROLE_PERMISSION_MAP (backend/src/modules/auth/permissions.ts).
 export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
   owner: [
@@ -87,6 +110,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "activity:read",
     ...COLLAB_FULL,
     ...PHASE_72_FULL,
+    ...PHASE_73_FULL,
   ],
   admin: [
     "workspace:read",
@@ -111,6 +135,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "activity:read",
     ...COLLAB_FULL,
     ...PHASE_72_FULL,
+    ...PHASE_73_FULL,
   ],
   manager: [
     "workspace:read",
@@ -130,6 +155,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "activity:read",
     ...COLLAB_FULL,
     ...PHASE_72_FULL,
+    ...PHASE_73_FULL,
   ],
   member: [
     "workspace:read",
@@ -145,6 +171,7 @@ export const ROLE_PERMISSION_MAP: Record<string, PermissionKey[]> = {
     "activity:read",
     ...COLLAB_MEMBER,
     ...PHASE_72_MEMBER,
+    ...PHASE_73_MEMBER,
   ],
 };
 

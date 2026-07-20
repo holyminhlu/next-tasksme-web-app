@@ -23,6 +23,15 @@ import {
   workspaceTimerRouter,
 } from "../time-logs/time-logs.routes.js";
 import { taskHistoryRouter } from "../task-history/task-history.routes.js";
+import { automationRunsRouter } from "../automation/automation-runs.routes.js";
+import { businessCalendarsRouter } from "../business-calendars/business-calendars.routes.js";
+import { recurrencesRouter } from "../recurrences/recurrences.routes.js";
+import { riskRulesRouter, taskRiskRouter } from "../risk/risk.routes.js";
+import {
+  slaInstancesRouter,
+  slaPoliciesRouter,
+  taskSlaRouter,
+} from "../sla/sla.routes.js";
 import {
   acceptInvitation,
   applyModulePreset,
@@ -250,6 +259,14 @@ workspacesRouter.use(
   "/:workspaceId/tasks/:taskId/status-history",
   taskHistoryRouter,
 );
+workspacesRouter.use("/:workspaceId/tasks/:taskId/recurrence", recurrencesRouter);
+workspacesRouter.use("/:workspaceId/tasks/:taskId/risk", taskRiskRouter);
+workspacesRouter.use("/:workspaceId/tasks/:taskId/sla", taskSlaRouter);
+workspacesRouter.use("/:workspaceId/risk-rules", riskRulesRouter);
+workspacesRouter.use("/:workspaceId/business-calendars", businessCalendarsRouter);
+workspacesRouter.use("/:workspaceId/sla-policies", slaPoliciesRouter);
+workspacesRouter.use("/:workspaceId/sla-instances", slaInstancesRouter);
+workspacesRouter.use("/:workspaceId/automation-runs", automationRunsRouter);
 workspacesRouter.use("/:workspaceId/timers", workspaceTimerRouter);
 workspacesRouter.use("/:workspaceId/tags", tagsRouter);
 workspacesRouter.use("/:workspaceId/custom-fields", customFieldsRouter);

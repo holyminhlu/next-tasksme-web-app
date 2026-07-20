@@ -63,6 +63,11 @@ export class NotificationsService {
       taskAssigned: preference?.taskAssigned ?? true,
       taskMentioned: preference?.taskMentioned ?? true,
       taskUnblocked: preference?.taskUnblocked ?? true,
+      recurrenceCreated: preference?.recurrenceCreated ?? true,
+      recurrenceSkipped: preference?.recurrenceSkipped ?? true,
+      slaWarning: preference?.slaWarning ?? true,
+      slaBreached: preference?.slaBreached ?? true,
+      riskEscalated: preference?.riskEscalated ?? true,
       updatedAt: preference?.updatedAt.toISOString() ?? null,
     };
   }
@@ -78,6 +83,11 @@ export class NotificationsService {
         taskAssigned: input.taskAssigned,
         taskMentioned: input.taskMentioned,
         taskUnblocked: input.taskUnblocked,
+        recurrenceCreated: input.recurrenceCreated,
+        recurrenceSkipped: input.recurrenceSkipped,
+        slaWarning: input.slaWarning,
+        slaBreached: input.slaBreached,
+        riskEscalated: input.riskEscalated,
       },
       create: {
         workspaceId,
@@ -85,6 +95,11 @@ export class NotificationsService {
         taskAssigned: input.taskAssigned ?? true,
         taskMentioned: input.taskMentioned ?? true,
         taskUnblocked: input.taskUnblocked ?? true,
+        recurrenceCreated: input.recurrenceCreated ?? true,
+        recurrenceSkipped: input.recurrenceSkipped ?? true,
+        slaWarning: input.slaWarning ?? true,
+        slaBreached: input.slaBreached ?? true,
+        riskEscalated: input.riskEscalated ?? true,
       },
     });
     return {
@@ -93,6 +108,11 @@ export class NotificationsService {
       taskAssigned: preference.taskAssigned,
       taskMentioned: preference.taskMentioned,
       taskUnblocked: preference.taskUnblocked,
+      recurrenceCreated: preference.recurrenceCreated,
+      recurrenceSkipped: preference.recurrenceSkipped,
+      slaWarning: preference.slaWarning,
+      slaBreached: preference.slaBreached,
+      riskEscalated: preference.riskEscalated,
       updatedAt: preference.updatedAt.toISOString(),
     };
   }

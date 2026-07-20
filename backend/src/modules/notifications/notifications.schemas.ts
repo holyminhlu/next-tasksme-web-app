@@ -26,6 +26,11 @@ export const updateNotificationPreferenceSchema = z
     taskAssigned: z.boolean().optional(),
     taskMentioned: z.boolean().optional(),
     taskUnblocked: z.boolean().optional(),
+    recurrenceCreated: z.boolean().optional(),
+    recurrenceSkipped: z.boolean().optional(),
+    slaWarning: z.boolean().optional(),
+    slaBreached: z.boolean().optional(),
+    riskEscalated: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one preference is required",

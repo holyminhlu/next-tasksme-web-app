@@ -687,6 +687,51 @@ for (const endpoint of [
     body: undefined,
     description: "Status timeline and duration aggregates",
   },
+  {
+    method: "get" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/recurrence",
+    tag: "Recurrence",
+    params: taskIdParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Task recurrence schedule or null",
+  },
+  {
+    method: "put" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/recurrence",
+    tag: "Recurrence",
+    params: taskIdParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Create or update task recurrence",
+  },
+  {
+    method: "get" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/risk",
+    tag: "Risk",
+    params: taskIdParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Task risk level, score, and reasons",
+  },
+  {
+    method: "get" as const,
+    path: "/api/v1/workspaces/{workspaceId}/tasks/{taskId}/sla",
+    tag: "SLA",
+    params: taskIdParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Task SLA instances when SLA module is enabled",
+  },
+  {
+    method: "get" as const,
+    path: "/api/v1/workspaces/{workspaceId}/automation-runs",
+    tag: "Automation",
+    params: workspaceIdParamsSchema,
+    query: undefined,
+    body: undefined,
+    description: "Automation run history with optional retry",
+  },
 ] as const) {
   registry.registerPath({
     method: endpoint.method,
@@ -1158,9 +1203,9 @@ export function buildOpenApiDocument() {
     openapi: "3.0.3",
     info: {
       title: "TaskMng SME API",
-      version: "7.2.0",
+      version: "7.3.0",
       description:
-        "Phase 7.2 API: task dependencies, policy-aware handoff, server time tracking, and stage history",
+        "Phase 7.3 API: recurring tasks, rule-based risk, SLA with business calendars, and automation worker history",
     },
     servers: [{ url: "http://localhost:4000" }],
   });

@@ -474,6 +474,17 @@ export function mapTask(raw: unknown): TaskRecord | null {
       mapPersonName(creator),
     rank: pick(record, ["rank"], asNonEmptyString),
     version: pick(record, ["version"], asNumber) ?? 1,
+    manualRiskLevel: pick(record, ["manualRiskLevel"], asNonEmptyString) as
+      | TaskRecord["manualRiskLevel"]
+      | null,
+    riskLevel: pick(record, ["riskLevel"], asNonEmptyString) as
+      | TaskRecord["riskLevel"]
+      | null,
+    riskScore: pick(record, ["riskScore"], asNumber),
+    riskReasons: Array.isArray(record.riskReasons)
+      ? record.riskReasons.filter((item): item is string => typeof item === "string")
+      : [],
+    riskCalculatedAt: pick(record, ["riskCalculatedAt"], asNonEmptyString),
     archivedAt: pick(record, ["archivedAt"], asNonEmptyString),
     deletedAt: pick(record, ["deletedAt"], asNonEmptyString),
     createdAt: pick(record, ["createdAt"], asNonEmptyString),
