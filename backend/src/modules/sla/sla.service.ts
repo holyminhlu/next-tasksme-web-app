@@ -113,11 +113,18 @@ async function notifySla(instanceId: string, kind: "warning" | "breach", now = n
       where: { id: instanceId },
       include: { task: true, policy: true },
     });
-    if (!instance || instance.status !== "ACTIVE") return false;
+    if (!instance) return false;
     const field = kind === "warning" ? "warningSentAt" : "breachNotifiedAt";
     if (instance[field]) return false;
+    if (kind === "breach" && instance.status !== "ACTIVE") return false;
     const claimed = await tx.taskSlaInstance.updateMany({
-      where: { id: instance.id, status: "ACTIVE", [field]: null },
+      where: {
+        id: instance.id,
+        [field]: null,
+        ...(kind === "warning"
+          ? { status: { in: ["ACTIVE", "BREACHED"] } }
+          : { status: "ACTIVE" }),
+      },
       data:
         kind === "warning"
           ? { warningSentAt: now }
@@ -160,7 +167,10 @@ export async function processDueSlaNotifications(limit: number, now = new Date()
   const rows = await prisma.$queryRaw<Array<{ id: string; kind: "warning" | "breach" }>>`
     (
       SELECT "id", 'warning'::text AS kind FROM "task_sla_instances"
-      WHERE "status" = 'ACTIVE' AND "warningSentAt" IS NULL AND "warningAt" <= ${now}
+      WHERE "warningSentAt" IS NULL
+        AND "warningAt" IS NOT NULL
+        AND "warningAt" <= ${now}
+        AND "status" IN ('ACTIVE', 'BREACHED')
       ORDER BY "warningAt" LIMIT ${limit}
     )
     UNION ALL
@@ -170,7 +180,15 @@ export async function processDueSlaNotifications(limit: number, now = new Date()
       ORDER BY "dueAt" LIMIT ${limit}
     )
   `;
-  return Promise.all(rows.map((row) => notifySla(row.id, row.kind, now)));
+  const warnings = rows.filter((row) => row.kind === "warning");
+  const breaches = rows.filter((row) => row.kind === "breach");
+  const warningResults = await Promise.all(
+    warnings.map((row) => notifySla(row.id, "warning", now)),
+  );
+  const breachResults = await Promise.all(
+    breaches.map((row) => notifySla(row.id, "breach", now)),
+  );
+  return [...warningResults, ...breachResults];
 }
 
 export class SlaService {
