@@ -66,6 +66,11 @@ export type TaskRecord = {
   /** Lexorank string used by board ordering. */
   rank: string | null;
   version: number;
+  manualRiskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | null;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | null;
+  riskScore: number | null;
+  riskReasons: string[];
+  riskCalculatedAt: string | null;
   archivedAt: string | null;
   deletedAt: string | null;
   createdAt: string | null;

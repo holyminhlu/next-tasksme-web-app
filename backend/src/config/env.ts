@@ -81,6 +81,10 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(300),
+  WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
+  WORKER_BATCH_SIZE: z.coerce.number().int().positive().default(20),
+  WORKER_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  WORKER_ENABLED: booleanFromEnv.default(true),
 });
 
 export type Env = z.infer<typeof envSchema> & {

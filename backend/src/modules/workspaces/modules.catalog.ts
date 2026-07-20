@@ -35,6 +35,12 @@ export const MODULE_CATALOG = [
     description: "Progress and workload reports",
     core: false,
   },
+  {
+    key: "sla",
+    name: "SLA",
+    description: "Service-level agreements with business calendars",
+    core: false,
+  },
 ] as const;
 
 export type ModuleKey = (typeof MODULE_CATALOG)[number]["key"];
@@ -57,7 +63,15 @@ export const MODULE_PRESETS: Record<
   },
   full: {
     label: "Full workspace",
-    enabledKeys: ["tasks", "projects", "members", "calendar", "files", "reports"],
+    enabledKeys: [
+      "tasks",
+      "projects",
+      "members",
+      "calendar",
+      "files",
+      "reports",
+      "sla",
+    ],
   },
 };
 

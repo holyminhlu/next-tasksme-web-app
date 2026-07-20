@@ -41,6 +41,7 @@ services:
       AUTH_RATE_LIMIT_MAX: 20
       LOG_LEVEL: info
       ENABLE_SWAGGER: "true"
+      WORKER_ENABLED: "false"
     ports:
       - "4000:4000"
     depends_on:
@@ -55,6 +56,29 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  worker:
+    build:
+      context: ./backend
+    command: ["node", "dist/src/worker.js"]
+    environment:
+      NODE_ENV: production
+      APP_NAME: taskmng-worker
+      APP_URL: http://localhost:4000
+      FRONTEND_URL: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/taskmng?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env.docker}
+      LOG_LEVEL: info
+      WORKER_ENABLED: "true"
+      WORKER_POLL_INTERVAL_MS: 5000
+      WORKER_BATCH_SIZE: 20
+      WORKER_MAX_ATTEMPTS: 5
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
 
   frontend:
     build:

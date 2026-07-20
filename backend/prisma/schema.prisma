@@ -74,6 +74,7 @@ enum TaskSource {
   MANUAL
   AI_QUICK_CAPTURE
   ONBOARDING
+  RECURRING
 }
 
 enum ActivityVisibility {
@@ -90,6 +91,11 @@ enum NotificationType {
   TASK_ASSIGNED
   TASK_MENTIONED
   TASK_UNBLOCKED
+  RECURRENCE_CREATED
+  RECURRENCE_SKIPPED
+  SLA_WARNING
+  SLA_BREACHED
+  RISK_ESCALATED
 }
 
 enum CustomFieldType {
@@ -122,6 +128,57 @@ enum TimeLogSource {
   TIMER
   MANUAL
   IMPORT
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum RecurrenceOverlapPolicy {
+  CREATE_ANYWAY
+  SKIP_IF_OPEN
+  CREATE_AND_NOTIFY
+}
+
+enum RecurrenceOccurrenceStatus {
+  PENDING
+  CREATED
+  SKIPPED
+  FAILED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SlaInstanceStatus {
+  ACTIVE
+  PAUSED
+  MET
+  BREACHED
+  CANCELLED
+}
+
+enum AutomationJobType {
+  RECURRENCE_GENERATE
+  RISK_RECALCULATE
+  SLA_WARNING
+  SLA_BREACH
+  RETRY
+}
+
+enum AutomationRunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+  DEAD
 }
 
 enum SavedViewResourceType {
@@ -181,6 +238,11 @@ model User {
   dependencyOverrides      Task[]                   @relation("TaskDependencyOverrider")
   timeLogs                 TimeLog[]
   taskStatusChanges        TaskStatusHistory[]      @relation("TaskStatusChanger")
+  taskRecurrencesCreated   TaskRecurrence[]         @relation("TaskRecurrenceCreator")
+  riskRulesUpdated         RiskRule[]               @relation("RiskRuleUpdater")
+  businessCalendarsCreated BusinessCalendar[]       @relation("BusinessCalendarCreator")
+  slaPoliciesCreated       SlaPolicy[]              @relation("SlaPolicyCreator")
+  automationRunsRetried    AutomationRun[]          @relation("AutomationRunRetrier")
   lastActiveWorkspace      Workspace?               @relation("UserLastActiveWorkspace", fields: [lastActiveWorkspaceId], references: [id], onDelete: SetNull)
 
   @@index([status])
@@ -225,6 +287,12 @@ model Workspace {
   attachments             Attachment[]
   taskDependencies        TaskDependency[]
   timeLogs                TimeLog[]
+  taskRecurrences         TaskRecurrence[]
+  riskRules               RiskRule[]
+  businessCalendars       BusinessCalendar[]
+  slaPolicies             SlaPolicy[]
+  taskSlaInstances        TaskSlaInstance[]
+  automationRuns          AutomationRun[]
   lastActiveUsers         User[]                   @relation("UserLastActiveWorkspace")
 
   @@index([ownerId])
@@ -471,27 +539,38 @@ model Task {
   assigneeId               String?      @db.Uuid
   rank                     String       @default("0000000000001000")
   version                  Int          @default(1)
+  manualRiskLevel          RiskLevel?
+  riskLevel                RiskLevel?
+  riskScore                Int?
+  riskReasonsJson          Json?
+  riskCalculatedAt         DateTime?
+  riskRecalculateAt        DateTime?
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
   archivedAt               DateTime?
   deletedAt                DateTime?
 
-  workspace               Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project                 Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  creator                 User?                  @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  assignee                User?                  @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  completedBy             User?                  @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
-  dependencyOverriddenBy  User?                  @relation("TaskDependencyOverrider", fields: [dependencyOverriddenById], references: [id], onDelete: SetNull)
+  workspace               Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project                 Project?                   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  creator                 User?                      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  assignee                User?                      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  completedBy             User?                      @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  dependencyOverriddenBy  User?                      @relation("TaskDependencyOverrider", fields: [dependencyOverriddenById], references: [id], onDelete: SetNull)
   notifications           Notification[]
   checklistItems          ChecklistItem[]
   taskTags                TaskTag[]
   customFieldValues       TaskCustomFieldValue[]
   comments                Comment[]
   attachments             Attachment[]
-  predecessorDependencies TaskDependency[]       @relation("DependencyPredecessor")
-  successorDependencies   TaskDependency[]       @relation("DependencySuccessor")
+  predecessorDependencies TaskDependency[]           @relation("DependencyPredecessor")
+  successorDependencies   TaskDependency[]           @relation("DependencySuccessor")
   timeLogs                TimeLog[]
   statusHistory           TaskStatusHistory[]
+  templateRecurrences     TaskRecurrence[]           @relation("RecurrenceTemplateTask")
+  generatedOccurrences    RecurringTaskOccurrence[]  @relation("OccurrenceGeneratedTask")
+  riskSnapshots           TaskRiskSnapshot[]
+  slaInstances            TaskSlaInstance[]
+  automationRuns          AutomationRun[]
 
   @@unique([workspaceId, taskNumber])
   @@index([workspaceId])
@@ -507,6 +586,8 @@ model Task {
   @@index([completedById])
   @@index([dependencyOverriddenById])
   @@index([workspaceId, archivedAt, deletedAt])
+  @@index([riskRecalculateAt])
+  @@index([workspaceId, riskLevel])
   @@map("tasks")
 }
 
@@ -584,14 +665,19 @@ model Notification {
 }
 
 model NotificationPreference {
-  id            String   @id @default(uuid()) @db.Uuid
-  workspaceId   String   @db.Uuid
-  userId        String   @db.Uuid
-  taskAssigned  Boolean  @default(true)
-  taskMentioned Boolean  @default(true)
-  taskUnblocked Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String   @id @default(uuid()) @db.Uuid
+  workspaceId        String   @db.Uuid
+  userId             String   @db.Uuid
+  taskAssigned       Boolean  @default(true)
+  taskMentioned      Boolean  @default(true)
+  taskUnblocked      Boolean  @default(true)
+  recurrenceCreated  Boolean  @default(true)
+  recurrenceSkipped  Boolean  @default(true)
+  slaWarning         Boolean  @default(true)
+  slaBreached        Boolean  @default(true)
+  riskEscalated      Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -828,4 +914,219 @@ model ActivityEvent {
   @@index([workspaceId, projectId, createdAt])
   @@index([workspaceId, actorId, createdAt])
   @@map("activity_events")
+}
+
+model TaskRecurrence {
+  id              String                   @id @default(uuid()) @db.Uuid
+  workspaceId     String                   @db.Uuid
+  templateTaskId  String                   @db.Uuid
+  frequency       RecurrenceFrequency
+  interval        Int                      @default(1)
+  daysOfWeekJson  Json                     @default("[]")
+  dayOfMonth      Int?
+  timezone        String                   @default("UTC")
+  startAt         DateTime
+  endAt           DateTime?
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  overlapPolicy   RecurrenceOverlapPolicy  @default(SKIP_IF_OPEN)
+  isActive        Boolean                  @default(true)
+  createdById     String?                  @db.Uuid
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  workspace    Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  templateTask Task                      @relation("RecurrenceTemplateTask", fields: [templateTaskId], references: [id], onDelete: Cascade)
+  createdBy    User?                     @relation("TaskRecurrenceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  occurrences  RecurringTaskOccurrence[]
+
+  @@index([workspaceId, isActive, nextRunAt])
+  @@index([templateTaskId])
+  @@index([isActive, nextRunAt])
+  @@map("task_recurrences")
+}
+
+model RecurringTaskOccurrence {
+  id               String                     @id @default(uuid()) @db.Uuid
+  recurrenceId     String                     @db.Uuid
+  scheduledAt      DateTime
+  generatedTaskId  String?                    @db.Uuid
+  status           RecurrenceOccurrenceStatus @default(PENDING)
+  errorMessage     String?
+  createdAt        DateTime                   @default(now())
+
+  recurrence    TaskRecurrence @relation(fields: [recurrenceId], references: [id], onDelete: Cascade)
+  generatedTask Task?          @relation("OccurrenceGeneratedTask", fields: [generatedTaskId], references: [id], onDelete: SetNull)
+
+  @@unique([recurrenceId, scheduledAt])
+  @@index([generatedTaskId])
+  @@index([status, createdAt])
+  @@map("recurring_task_occurrences")
+}
+
+model RiskRule {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  name        String
+  weightsJson Json
+  thresholdsJson Json
+  isActive    Boolean  @default(true)
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  updatedBy User?     @relation("RiskRuleUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, isActive])
+  @@map("risk_rules")
+}
+
+model TaskRiskSnapshot {
+  id           String    @id @default(uuid()) @db.Uuid
+  taskId       String    @db.Uuid
+  riskLevel    RiskLevel
+  riskScore    Int
+  riskReasons  Json
+  calculatedAt DateTime  @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, calculatedAt])
+  @@map("task_risk_snapshots")
+}
+
+model BusinessCalendar {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  name        String
+  timezone    String   @default("UTC")
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    User?         @relation("BusinessCalendarCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  workingHours WorkingHours[]
+  holidays     Holiday[]
+  slaPolicies  SlaPolicy[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, isActive, isDefault])
+  @@map("business_calendars")
+}
+
+model WorkingHours {
+  id         String @id @default(uuid()) @db.Uuid
+  calendarId String @db.Uuid
+  dayOfWeek  Int
+  startMinute Int
+  endMinute   Int
+
+  calendar BusinessCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, dayOfWeek])
+  @@index([calendarId])
+  @@map("working_hours")
+}
+
+model Holiday {
+  id         String   @id @default(uuid()) @db.Uuid
+  calendarId String   @db.Uuid
+  date       DateTime @db.Date
+  name       String
+  isWorking  Boolean  @default(false)
+
+  calendar BusinessCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, date])
+  @@index([calendarId, date])
+  @@map("holidays")
+}
+
+model SlaPolicy {
+  id                     String   @id @default(uuid()) @db.Uuid
+  workspaceId            String   @db.Uuid
+  name                   String
+  triggerType            String   @default("TASK_CREATED")
+  targetDurationMinutes  Int
+  warningBeforeMinutes   Int
+  applicableConditionsJson Json   @default("{}")
+  businessCalendarId     String?  @db.Uuid
+  isActive               Boolean  @default(true)
+  createdById            String?  @db.Uuid
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  businessCalendar BusinessCalendar? @relation(fields: [businessCalendarId], references: [id], onDelete: SetNull)
+  createdBy        User?             @relation("SlaPolicyCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  instances        TaskSlaInstance[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, isActive])
+  @@index([businessCalendarId])
+  @@map("sla_policies")
+}
+
+model TaskSlaInstance {
+  id                 String           @id @default(uuid()) @db.Uuid
+  workspaceId        String           @db.Uuid
+  taskId             String           @db.Uuid
+  policyId           String           @db.Uuid
+  startedAt          DateTime
+  dueAt              DateTime
+  warningAt          DateTime?
+  status             SlaInstanceStatus @default(ACTIVE)
+  pausedAt           DateTime?
+  totalPausedSeconds Int              @default(0)
+  warningSentAt      DateTime?
+  breachedAt         DateTime?
+  breachNotifiedAt   DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  policy    SlaPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@index([taskId, status])
+  @@index([status, warningAt])
+  @@index([status, dueAt])
+  @@map("task_sla_instances")
+}
+
+model AutomationRun {
+  id              String              @id @default(uuid()) @db.Uuid
+  workspaceId     String              @db.Uuid
+  taskId          String?             @db.Uuid
+  jobType         AutomationJobType
+  status          AutomationRunStatus @default(PENDING)
+  attempts        Int                 @default(0)
+  maxAttempts     Int                 @default(5)
+  idempotencyKey  String              @unique
+  correlationId   String?
+  payloadJson     Json                @default("{}")
+  resultJson      Json?
+  errorMessage    String?
+  nextRetryAt     DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  retriedById     String?             @db.Uuid
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  task      Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  retriedBy User?     @relation("AutomationRunRetrier", fields: [retriedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, jobType, status])
+  @@index([status, nextRetryAt])
+  @@index([taskId, createdAt])
+  @@map("automation_runs")
 }

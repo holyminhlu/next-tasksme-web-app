@@ -195,6 +195,50 @@ export const PERMISSIONS = [
     key: "task_history.view",
     description: "View task stage history",
   },
+  {
+    key: "recurrence.view",
+    description: "View task recurrence schedules",
+  },
+  {
+    key: "recurrence.manage",
+    description: "Manage task recurrence schedules",
+  },
+  {
+    key: "risk.view",
+    description: "View task risk indicators",
+  },
+  {
+    key: "risk.update",
+    description: "Update manual task risk level",
+  },
+  {
+    key: "risk.configure",
+    description: "Configure workspace risk rules",
+  },
+  {
+    key: "sla.view",
+    description: "View SLA policies and task SLA state",
+  },
+  {
+    key: "sla.configure",
+    description: "Configure SLA policies and business calendars",
+  },
+  {
+    key: "sla.override",
+    description: "Pause, resume, or override SLA instances",
+  },
+  {
+    key: "automation.view",
+    description: "View automation history",
+  },
+  {
+    key: "automation.manage",
+    description: "Manage automation configuration",
+  },
+  {
+    key: "automation.retry",
+    description: "Retry failed automation jobs",
+  },
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
@@ -264,6 +308,29 @@ const PHASE_72_MEMBER: PermissionKey[] = [
   "task_history.view",
 ];
 
+const PHASE_73_FULL: PermissionKey[] = [
+  "recurrence.view",
+  "recurrence.manage",
+  "risk.view",
+  "risk.update",
+  "risk.configure",
+  "sla.view",
+  "sla.configure",
+  "sla.override",
+  "automation.view",
+  "automation.manage",
+  "automation.retry",
+];
+
+const PHASE_73_MEMBER: PermissionKey[] = [
+  "recurrence.view",
+  "recurrence.manage",
+  "risk.view",
+  "risk.update",
+  "sla.view",
+  "automation.view",
+];
+
 export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
   owner: PERMISSIONS.map((permission) => permission.key),
   admin: [
@@ -289,6 +356,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "projects:delete",
     ...COLLAB_FULL,
     ...PHASE_72_FULL,
+    ...PHASE_73_FULL,
   ],
   manager: [
     "workspace:read",
@@ -308,6 +376,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "activity:read",
     ...COLLAB_FULL,
     ...PHASE_72_FULL,
+    ...PHASE_73_FULL,
   ],
   member: [
     "workspace:read",
@@ -323,6 +392,7 @@ export const ROLE_PERMISSION_MAP: Record<SystemRoleKey, PermissionKey[]> = {
     "activity:read",
     ...COLLAB_MEMBER,
     ...PHASE_72_MEMBER,
+    ...PHASE_73_MEMBER,
   ],
 };
 

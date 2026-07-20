@@ -109,7 +109,16 @@ export function mapNotificationPreference(
     return null;
   }
 
-  return { taskAssigned };
+  return {
+    taskAssigned,
+    taskMentioned: asBoolean(nested.taskMentioned) ?? true,
+    taskUnblocked: asBoolean(nested.taskUnblocked) ?? true,
+    recurrenceCreated: asBoolean(nested.recurrenceCreated) ?? true,
+    recurrenceSkipped: asBoolean(nested.recurrenceSkipped) ?? true,
+    slaWarning: asBoolean(nested.slaWarning) ?? true,
+    slaBreached: asBoolean(nested.slaBreached) ?? true,
+    riskEscalated: asBoolean(nested.riskEscalated) ?? true,
+  };
 }
 
 export function unreadNotificationIds(

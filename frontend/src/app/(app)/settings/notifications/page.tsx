@@ -17,6 +17,64 @@ import {
 import { useShell } from "@/modules/shell";
 import styles from "../../app-pages.module.css";
 
+const DEFAULT_PREFS: NotificationPreference = {
+  taskAssigned: true,
+  taskMentioned: true,
+  taskUnblocked: true,
+  recurrenceCreated: true,
+  recurrenceSkipped: true,
+  slaWarning: true,
+  slaBreached: true,
+  riskEscalated: true,
+};
+
+const WORKSPACE_PREF_FIELDS: Array<{
+  key: keyof NotificationPreference;
+  label: string;
+  hint: string;
+}> = [
+  {
+    key: "taskAssigned",
+    label: "Task assigned",
+    hint: "When someone assigns a task to me in this workspace.",
+  },
+  {
+    key: "taskMentioned",
+    label: "Task mentioned",
+    hint: "When someone mentions me on a task.",
+  },
+  {
+    key: "taskUnblocked",
+    label: "Task unblocked",
+    hint: "When a task becomes unblocked after dependencies complete.",
+  },
+  {
+    key: "recurrenceCreated",
+    label: "Recurring task created",
+    hint: "When a recurring task occurrence is created and assigned to me.",
+  },
+  {
+    key: "recurrenceSkipped",
+    label: "Recurring task skipped",
+    hint: "When a recurrence is skipped because an earlier occurrence is still open.",
+  },
+  {
+    key: "slaWarning",
+    label: "SLA warning",
+    hint: "When a task SLA is approaching its due time.",
+  },
+  {
+    key: "slaBreached",
+    label: "SLA breached",
+    hint: "When a task SLA is breached.",
+  },
+  {
+    key: "riskEscalated",
+    label: "Risk escalated",
+    hint: "When a task risk level increases.",
+  },
+];
+
 export default function NotificationSettingsPage() {
   const { selectedWorkspace } = useAuth();
   const { preferences, setNotificationPref } = useShell();
@@ -24,9 +82,12 @@ export default function NotificationSettingsPage() {
   const prefs = preferences.notificationPrefs;
   const workspaceId = selectedWorkspace?.id ?? null;
 
-  const [taskAssigned, setTaskAssigned] = useState(true);
+  const [workspacePrefs, setWorkspacePrefs] =
+    useState<NotificationPreference>(DEFAULT_PREFS);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingKey, setSavingKey] = useState<keyof NotificationPreference | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [available, setAvailable] = useState(true);
 
@@ -57,7 +118,7 @@ export default function NotificationSettingsPage() {
     }
 
     setAvailable(true);
-    setTaskAssigned(result.data.taskAssigned);
+    setWorkspacePrefs({ ...DEFAULT_PREFS, ...result.data });
   }, [workspaceId]);
 
   useEffect(() => {
@@ -65,24 +126,28 @@ export default function NotificationSettingsPage() {
     void loadPreference();
   }, [loadPreference]);
 
-  async function handleTaskAssignedChange(checked: boolean) {
-    if (!workspaceId || saving) {
+  async function handleWorkspacePrefChange(
+    key: keyof NotificationPreference,
+    checked: boolean,
+  ) {
+    if (!workspaceId || savingKey) {
       return;
     }
 
-    const previous = taskAssigned;
-    setTaskAssigned(checked);
-    setSaving(true);
+    const previous = workspacePrefs;
+    const next = { ...workspacePrefs, [key]: checked };
+    setWorkspacePrefs(next);
+    setSavingKey(key);
 
     const result = await notificationsService.updateNotificationPreference(
       workspaceId,
-      { taskAssigned: checked } satisfies NotificationPreference,
+      next,
     );
 
-    setSaving(false);
+    setSavingKey(null);
 
     if (!result.ok) {
-      setTaskAssigned(previous);
+      setWorkspacePrefs(previous);
       toast({
         title: "Couldn't save preference",
         description: result.message,
@@ -91,14 +156,7 @@ export default function NotificationSettingsPage() {
       return;
     }
 
-    setTaskAssigned(result.data.taskAssigned);
-    toast({
-      title: "Preference saved",
-      description: result.data.taskAssigned
-        ? "You'll get alerts when tasks are assigned to you."
-        : "Task assignment alerts are turned off for this workspace.",
-      tone: "success",
-    });
+    setWorkspacePrefs({ ...DEFAULT_PREFS, ...result.data });
   }
 
   return (
@@ -126,20 +184,25 @@ export default function NotificationSettingsPage() {
           <p className={styles.noticeBanner}>
             <Info size={16} aria-hidden className={styles.bannerIcon} />
             <span>
-              Assignment notification preferences aren&apos;t available on this
+              Workspace notification preferences aren&apos;t available on this
               server yet. Local browser preferences below still apply on this
               device only.
             </span>
           </p>
         ) : (
           <div className={styles.form} style={{ marginTop: 16, maxWidth: 560 }}>
-            <Switch
-              label="Task assigned"
-              hint="Notify me when someone assigns a task to me in this workspace."
-              checked={taskAssigned}
-              disabled={saving}
-              onChange={(checked) => void handleTaskAssignedChange(checked)}
-            />
+            {WORKSPACE_PREF_FIELDS.map((field) => (
+              <Switch
+                key={field.key}
+                label={field.label}
+                hint={field.hint}
+                checked={workspacePrefs[field.key] ?? true}
+                disabled={savingKey !== null}
+                onChange={(checked) =>
+                  void handleWorkspacePrefChange(field.key, checked)
+                }
+              />
+            ))}
           </div>
         )}
       </section>

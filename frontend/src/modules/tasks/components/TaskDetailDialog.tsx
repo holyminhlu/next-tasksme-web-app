@@ -47,6 +47,7 @@ import type {
 import { AssigneePicker } from "./AssigneePicker";
 import { TaskCollaborationPanels } from "./TaskCollaborationPanels";
 import { TaskWorkflowPanels } from "./TaskWorkflowPanels";
+import { TaskAutomationPanels } from "@/modules/automation/components/TaskAutomationPanels";
 import styles from "./task-ui.module.css";
 
 type EditFields = {
@@ -780,6 +781,19 @@ export function TaskDetailDialog({
           </Badge>
           {due && <Badge tone={due.tone}>{due.label}</Badge>}
           {current.isBlocked && <Badge tone="danger">Blocked</Badge>}
+          {current.riskLevel && (
+            <Badge
+              tone={
+                current.riskLevel === "CRITICAL" || current.riskLevel === "HIGH"
+                  ? "danger"
+                  : current.riskLevel === "MEDIUM"
+                    ? "warning"
+                    : "success"
+              }
+            >
+              Risk {current.riskLevel}
+            </Badge>
+          )}
           {isArchived && <Badge tone="warning">Archived</Badge>}
           {isDeleted && <Badge tone="danger">Deleted</Badge>}
         </div>
@@ -1036,6 +1050,7 @@ export function TaskDetailDialog({
             emitTasksChanged();
           }}
         />
+        <TaskAutomationPanels task={current} />
 
         <section className={styles.activitySection} aria-label="Activity">
           <h3 className={styles.activityTitle}>Activity</h3>

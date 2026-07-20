@@ -48,6 +48,14 @@ export const ACTIVITY_ACTIONS = {
   TIME_LOG_DELETED: "task.time_log_deleted",
   TIMER_STARTED: "task.timer_started",
   TIMER_STOPPED: "task.timer_stopped",
+  RECURRENCE_CREATED: "recurrence.created",
+  RECURRENCE_UPDATED: "recurrence.updated",
+  RECURRENCE_PAUSED: "recurrence.paused",
+  RECURRENCE_RESUMED: "recurrence.resumed",
+  RISK_RECALCULATED: "task.risk_recalculated",
+  SLA_PAUSED: "task.sla_paused",
+  SLA_RESUMED: "task.sla_resumed",
+  AUTOMATION_RETRIED: "automation.retried",
   PROJECT_CREATED: "project.created",
 } as const;
 
