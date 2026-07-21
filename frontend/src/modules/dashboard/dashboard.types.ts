@@ -55,6 +55,20 @@ export type StatusCount = {
   count: number;
 };
 
+/** Mirrors backend WorkflowStageCategory (Phase 8.2). */
+export type WorkflowStageCategory =
+  | "BACKLOG"
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "BLOCKED"
+  | "COMPLETED"
+  | "CANCELLED";
+
+export type CategoryCount = {
+  category: WorkflowStageCategory;
+  count: number;
+};
+
 export type TrendPoint = {
   date: string;
   count: number;
@@ -77,6 +91,8 @@ export type DashboardCharts = {
   /** False when the caller may not see workspace-wide charts (member scope). */
   available: boolean;
   tasksByStatus: StatusCount[];
+  /** Phase 8.2: tasks grouped by workflow stage category (or mapped legacy status). */
+  tasksByCategory: CategoryCount[];
   completionTrend: TrendPoint[];
   overdueByProject: ProjectCount[];
   /** Null when the backend omits it (e.g. personal workspace / no permission). */

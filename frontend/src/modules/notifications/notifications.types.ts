@@ -34,4 +34,5 @@ export type NotificationPreference = {
   slaWarning?: boolean;
   slaBreached?: boolean;
   riskEscalated?: boolean;
+  projectStatusChanged?: boolean;
 };

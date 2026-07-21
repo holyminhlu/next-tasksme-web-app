@@ -12,6 +12,25 @@ export type TaskSource = "MANUAL" | "AI_QUICK_CAPTURE" | string;
 
 export type ProjectVisibility = "WORKSPACE" | "PRIVATE";
 
+/** Mirrors backend WorkflowStageCategory (Phase 8.2). */
+export type WorkflowStageCategory =
+  | "BACKLOG"
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "BLOCKED"
+  | "COMPLETED"
+  | "CANCELLED";
+
+/** Lightweight workflow stage summary embedded on a task. */
+export type TaskWorkflowStage = {
+  id: string;
+  name: string;
+  category: WorkflowStageCategory;
+  color: string | null;
+  isInitial: boolean;
+  isTerminal: boolean;
+};
+
 export type TaskSortBy =
   | "taskNumber"
   | "title"
@@ -42,6 +61,9 @@ export type TaskRecord = {
   title: string;
   description: string | null;
   status: TaskStatus;
+  /** Phase 8.2: workflow stage assigned by the project's published workflow, if any. */
+  workflowStageId: string | null;
+  workflowStage: TaskWorkflowStage | null;
   priority: TaskPriority;
   startAt: string | null;
   dueDate: string | null;
@@ -249,21 +271,30 @@ export type ParseTaskInput = {
 export type ProjectMemberSummary = {
   id: string;
   userId: string;
-  fullName: string;
+  fullName: string | null;
   email: string | null;
   roleKey: string | null;
+  projectRole?: string | null;
   status: string | null;
 };
 
 export type ProjectRecord = {
   id: string;
   name: string;
+  code?: string | null;
   description: string | null;
   status: string;
+  priority?: string;
   visibility: ProjectVisibility | null;
+  managerId?: string | null;
   createdById: string | null;
   memberIds: string[];
   members: ProjectMemberSummary[];
+  startAt?: string | null;
+  endAt?: string | null;
+  progressPercent?: number | null;
+  health?: string | null;
+  overdueTasks?: number | null;
   createdAt: string | null;
   updatedAt: string | null;
   /** Optional task counts, when the backend includes them. */
@@ -319,7 +350,10 @@ export type TaskViewUrlState = {
 };
 
 export type MoveTaskInput = {
-  targetStatus: TaskStatus;
+  /** Legacy status-column move; required when targetStageId is not set. */
+  targetStatus?: TaskStatus;
+  /** Phase 8.2 workflow-stage-column move; takes priority over targetStatus. */
+  targetStageId?: string;
   beforeTaskId?: string | null;
   afterTaskId?: string | null;
   version: number;

@@ -10,6 +10,10 @@ import {
 import { generateDueOccurrences } from "./modules/recurrences/recurrences.service.js";
 import { recalculateDueTaskRisks, recalculateTaskRisk } from "./modules/risk/risk.service.js";
 import { processDueSlaNotifications } from "./modules/sla/sla.service.js";
+import {
+  claimPendingCloneJobs,
+  processCloneJob,
+} from "./modules/templates/clone-jobs.service.js";
 
 const env = getEnv();
 let stopping = false;
@@ -60,6 +64,14 @@ export async function pollWorkerOnce(now = new Date()) {
   }
   await recalculateDueTaskRisks(env.WORKER_BATCH_SIZE, now);
   await processDueSlaNotifications(env.WORKER_BATCH_SIZE, now);
+  const cloneJobs = await claimPendingCloneJobs(Math.max(1, Math.floor(env.WORKER_BATCH_SIZE / 2)));
+  for (const cloneJob of cloneJobs) {
+    try {
+      await processCloneJob(cloneJob);
+    } catch (error) {
+      logger.error({ err: error, cloneJobId: cloneJob.id }, "clone job failed");
+    }
+  }
   const runs = await claimDueAutomationRuns(env.WORKER_BATCH_SIZE, now);
   for (const run of runs) await executeRun(run);
 }

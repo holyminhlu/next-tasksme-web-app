@@ -229,7 +229,7 @@ export function ProjectMembersDialog({
                 {members.map((member) => (
                   <li key={member.userId} className={styles.avatarItem}>
                     <span className={styles.avatar} aria-hidden>
-                      {initialsFromName(member.fullName)}
+                      {initialsFromName(member.fullName ?? member.email ?? member.userId)}
                     </span>
                     <span>
                       <span className={styles.memberName}>{member.fullName}</span>

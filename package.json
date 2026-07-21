@@ -10,6 +10,8 @@
     "dev": "concurrently --kill-others-on-fail --names backend,frontend --prefix-colors blue,green \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list",
     "lint": "npm run lint --prefix backend && npm run lint --prefix frontend",
     "format": "prettier --write . && npm run format --prefix backend",
     "format:check": "prettier --check . && npm run format:check --prefix backend",
@@ -19,6 +21,7 @@
     "start": "concurrently --names backend,frontend --prefix-colors blue,green \"npm run start --prefix backend\" \"npm run start --prefix frontend\""
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "concurrently": "^9.2.1",
     "prettier": "^3.9.5"
   }

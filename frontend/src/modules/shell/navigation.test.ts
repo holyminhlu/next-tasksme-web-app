@@ -37,6 +37,7 @@ describe("route config", () => {
       "/dashboard",
       "/my-tasks",
       "/projects",
+      "/templates",
       "/notifications",
       "/settings",
     ]) {
@@ -99,6 +100,7 @@ describe("module filtering", () => {
 
     expect(routes).toContain("my-tasks");
     expect(routes).not.toContain("projects");
+    expect(routes).not.toContain("templates");
     expect(routes).toContain("settings-members");
   });
 
@@ -109,6 +111,7 @@ describe("module filtering", () => {
 
     expect(routes).toContain("my-tasks");
     expect(routes).toContain("projects");
+    expect(routes).toContain("templates");
   });
 });
 

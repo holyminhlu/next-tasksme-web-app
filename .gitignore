@@ -18,6 +18,8 @@ frontend/out/
 backend/dist/
 backend/generated/
 backend/coverage/
+playwright-report/
+test-results/
 
 # Logs and caches
 npm-debug.log*

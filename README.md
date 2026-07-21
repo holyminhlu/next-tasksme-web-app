@@ -94,6 +94,32 @@ npm test
 npm run build
 ```
 
+### Phase 8.2 Playwright release smoke
+
+The smoke creates users, workspaces, projects, workflows, templates, and clone
+jobs. Never point it at a development or production database.
+
+To let Playwright start isolated servers on ports `4001` and `3001`, create
+`backend/.env.test` from the example and set `DATABASE_URL` to `taskmng_test`
+(or another database whose name ends in `_test`). Then run:
+
+```powershell
+$env:PW_START_SERVERS = "1"
+npm run test:e2e
+Remove-Item Env:PW_START_SERVERS
+```
+
+Managed mode deploys migrations to that test database, disables email
+verification and background workers, and refuses database names that are not
+`taskmng_test` or `*_test`. Install Chromium once with
+`npx playwright install chromium`.
+
+To use already-running test servers instead, leave `PW_START_SERVERS` unset,
+set `E2E_BASE_URL` (frontend) and `E2E_API_URL` (backend), and run
+`npm run test:e2e`. Those servers must use an isolated test database and have
+email verification disabled. Use `npm run test:e2e:list` to check discovery
+without starting services.
+
 ## Docker Compose
 
 ```bash

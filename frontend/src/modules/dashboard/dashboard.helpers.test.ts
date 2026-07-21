@@ -105,6 +105,10 @@ describe("mapCharts", () => {
         { status: "TODO", count: 4 },
         { status: "bogus-status", count: 1 },
       ],
+      tasksByCategory: [
+        { category: "IN_PROGRESS", count: 5 },
+        { category: "bogus-category", count: 1 },
+      ],
       completionTrend: [{ date: "2026-07-16", count: 2 }, { count: 3 }],
       overdueByProject: [
         { projectId: "p1", projectName: "Ops", count: 2 },
@@ -116,6 +120,7 @@ describe("mapCharts", () => {
     });
 
     expect(charts.tasksByStatus).toEqual([{ status: "TODO", count: 4 }]);
+    expect(charts.tasksByCategory).toEqual([{ category: "IN_PROGRESS", count: 5 }]);
     expect(charts.completionTrend).toEqual([{ date: "2026-07-16", count: 2 }]);
     expect(charts.overdueByProject).toHaveLength(2);
     expect(charts.overdueByProject[1].projectName).toBe("Unknown project");
@@ -136,6 +141,7 @@ describe("mapCharts", () => {
     expect(charts).toEqual({
       available: false,
       tasksByStatus: [],
+      tasksByCategory: [],
       completionTrend: [],
       overdueByProject: [],
       teamWorkload: null,

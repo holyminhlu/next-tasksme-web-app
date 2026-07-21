@@ -1,3 +1,4 @@
+import { projectsService as projectsModule } from "@/modules/projects";
 import { del, downloadBlob, get, patch, post, postBlob, put } from "@/lib/api/client";
 import { buildQueryString } from "@/lib/api/query";
 import {
@@ -291,14 +292,21 @@ export async function parseTask(
 // Phase 6 — board / calendar / timeline / move / export
 // ---------------------------------------------------------------------------
 
+/** Board column filters: either a legacy status or a Phase 8.2 workflow stage id. */
+export type BoardColumnFilters = Omit<TaskListFilters, "status"> & {
+  status?: TaskStatus | null;
+  workflowStageId?: string | null;
+};
+
 export async function listBoardColumn(
   workspaceId: string,
-  filters: TaskListFilters & { status: TaskStatus },
+  filters: BoardColumnFilters,
 ): Promise<ServiceResult<TaskListResult>> {
   const envelope = await get<unknown>(
     `/workspaces/${workspaceId}/tasks/board${buildQueryString({
       ...buildTaskListQueryParams(filters),
       status: filters.status,
+      workflowStageId: filters.workflowStageId,
       sortBy: filters.sortBy ?? "rank",
       sortOrder: filters.sortOrder ?? "asc",
     })}`,
@@ -487,8 +495,13 @@ export async function deleteSavedView(
 export async function listProjects(
   workspaceId: string,
 ): Promise<ServiceResult<ProjectRecord[]>> {
-  const envelope = await get<unknown>(`/workspaces/${workspaceId}/projects`);
-  return toServiceResult(envelope, (data) => mapProjectList(data));
+  const result = await projectsModule.listProjects(workspaceId, { pageSize: 100 });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    data: mapProjectList(result.data.items),
+    meta: result.meta,
+  };
 }
 
 export async function createProject(

@@ -18,6 +18,7 @@ export type TaskFilterInput = {
   status?: Array<
     "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "BLOCKED" | "DONE" | "CANCELLED"
   >;
+  workflowStageId?: string;
   priority?: Array<"LOW" | "MEDIUM" | "HIGH" | "URGENT">;
   due?: "today" | "upcoming" | "overdue";
   deadlineFrom?: string;
@@ -77,6 +78,7 @@ export function buildTaskListWhere(
     ...(query.priority?.length ? { priority: { in: query.priority } } : {}),
     ...(query.assigneeId ? { assigneeId: query.assigneeId } : {}),
     ...(query.createdById ? { createdById: query.createdById } : {}),
+    ...(query.workflowStageId ? { workflowStageId: query.workflowStageId } : {}),
     ...(query.unassigned ? { assigneeId: null } : {}),
     ...(query.selectedIds?.length ? { id: { in: query.selectedIds } } : {}),
     ...(query.tagIds?.length

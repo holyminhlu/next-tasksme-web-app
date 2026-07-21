@@ -380,7 +380,7 @@ describe("parseTask / projects", () => {
     vi.mocked(post).mockResolvedValue(ok({ id: "p2", name: "Web" }));
 
     const listed = await tasksService.listProjects(WS);
-    expect(get).toHaveBeenCalledWith(`/workspaces/${WS}/projects`);
+    expect(get).toHaveBeenCalledWith(`/workspaces/${WS}/projects?pageSize=100`);
     expect(listed.ok).toBe(true);
     if (listed.ok) {
       expect(listed.data[0]?.visibility).toBe("WORKSPACE");

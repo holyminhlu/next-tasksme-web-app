@@ -6,7 +6,7 @@ import { TASK_STATUS_LABELS } from "@/modules/tasks";
 import type { TaskStatus } from "@/modules/tasks";
 import { myTasksHref } from "../dashboard.helpers";
 import * as dashboardService from "../dashboard.service";
-import type { DashboardFilters } from "../dashboard.types";
+import type { DashboardFilters, WorkflowStageCategory } from "../dashboard.types";
 import { useWidget } from "../useWidget";
 import {
   BarChart,
@@ -24,6 +24,24 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   IN_REVIEW: "var(--ds-color-primary)",
   BLOCKED: "var(--ds-color-danger)",
   DONE: "var(--ds-color-success)",
+  CANCELLED: "var(--ds-color-warning)",
+};
+
+const CATEGORY_LABELS: Record<WorkflowStageCategory, string> = {
+  BACKLOG: "Backlog",
+  NOT_STARTED: "Not started",
+  IN_PROGRESS: "In progress",
+  BLOCKED: "Blocked",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
+
+const CATEGORY_COLORS: Record<WorkflowStageCategory, string> = {
+  BACKLOG: "var(--ds-color-text-subtle)",
+  NOT_STARTED: "var(--ds-color-text-subtle)",
+  IN_PROGRESS: "var(--ds-color-primary)",
+  BLOCKED: "var(--ds-color-danger)",
+  COMPLETED: "var(--ds-color-success)",
   CANCELLED: "var(--ds-color-warning)",
 };
 
@@ -89,6 +107,16 @@ export function OverviewWidget({
     }),
   );
 
+  const categoryData: ChartDatum[] = (charts?.tasksByCategory ?? []).map(
+    (entry) => ({
+      key: entry.category,
+      label: CATEGORY_LABELS[entry.category],
+      value: entry.count,
+      color: CATEGORY_COLORS[entry.category],
+      detail: `${CATEGORY_LABELS[entry.category]}: ${entry.count} task${entry.count === 1 ? "" : "s"}`,
+    }),
+  );
+
   const trendPoints = (charts?.completionTrend ?? []).map((point) => ({
     key: point.date,
     label: shortDate(point.date, locale),
@@ -117,6 +145,13 @@ export function OverviewWidget({
       detail: `${member.memberName}: ${member.openTasks} open, ${member.overdueTasks} overdue`,
     }),
   );
+
+  const categorySummary =
+    categoryData.length > 0
+      ? `Tasks by workflow category: ${categoryData
+          .map((item) => `${item.label} ${item.value}`)
+          .join(", ")}.`
+      : "No tasks by category data.";
 
   const statusSummary =
     statusData.length > 0
@@ -173,6 +208,17 @@ export function OverviewWidget({
             />
           )}
         </div>
+
+        {categoryData.length > 0 && (
+          <div className={styles.chartBlock}>
+            <h3 className={styles.chartBlockTitle}>Tasks by workflow category</h3>
+            <DonutChart
+              data={categoryData}
+              centerLabel="tasks"
+              summary={categorySummary}
+            />
+          </div>
+        )}
 
         <div className={styles.chartBlock}>
           <h3 className={styles.chartBlockTitle}>Completion trend</h3>

@@ -31,6 +31,7 @@ export const updateNotificationPreferenceSchema = z
     slaWarning: z.boolean().optional(),
     slaBreached: z.boolean().optional(),
     riskEscalated: z.boolean().optional(),
+    projectStatusChanged: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one preference is required",
