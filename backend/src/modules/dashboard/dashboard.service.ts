@@ -1,4 +1,7 @@
-import type { Prisma } from "../../../generated/prisma/client.js";
+import type {
+  Prisma,
+  WorkflowStageCategory,
+} from "../../../generated/prisma/client.js";
 import { prisma } from "../../config/database.js";
 import { NotFoundError, ValidationError } from "../../lib/errors.js";
 import {
@@ -8,6 +11,8 @@ import {
   OPEN_TASK_STATUSES,
 } from "../../lib/task-scope.js";
 import { formatYmd, resolveDashboardRange } from "../../lib/timezone.js";
+import { taskStatusToCategory } from "../../lib/workflow-mapping.js";
+import { OPEN_WORKFLOW_CATEGORIES } from "../../lib/workflow-runtime.js";
 import { buildActivityVisibilityWhere } from "../../services/activity.service.js";
 import type { ActivityQuery, DashboardQuery, MyWorkQuery } from "./dashboard.schemas.js";
 
@@ -41,6 +46,21 @@ function mapTask(task: {
     projectId: task.projectId,
     projectName: task.project?.name ?? null,
     assigneeId: task.assigneeId,
+  };
+}
+
+/**
+ * Open-task predicate that covers both legacy status (for tasks without a
+ * workflow stage) and workflow-stage category (Phase 8.2), since a task's
+ * legacy `status` mirrors its stage category but custom workflows may add
+ * stages whose name-based status inference diverges from the category.
+ */
+function openTaskOrCategoryWhere(): Prisma.TaskWhereInput {
+  return {
+    OR: [
+      { status: { in: [...OPEN_TASK_STATUSES] } },
+      { workflowStage: { category: { in: OPEN_WORKFLOW_CATEGORIES } } },
+    ],
   };
 }
 
@@ -167,7 +187,7 @@ export class DashboardService {
 
     const openWhere: Prisma.TaskWhereInput = {
       ...where,
-      status: { in: [...OPEN_TASK_STATUSES] },
+      ...openTaskOrCategoryWhere(),
     };
     const dueTodayWhere: Prisma.TaskWhereInput = {
       ...openWhere,
@@ -338,7 +358,7 @@ export class DashboardService {
       by: ["projectId"],
       where: {
         ...where,
-        status: { in: [...OPEN_TASK_STATUSES] },
+        ...openTaskOrCategoryWhere(),
         dueDate: { lt: range.todayStart, not: null },
       },
       _count: { _all: true },
@@ -370,13 +390,26 @@ export class DashboardService {
     const openTasks = await prisma.task.findMany({
       where: {
         ...where,
-        status: { in: [...OPEN_TASK_STATUSES] },
+        ...openTaskOrCategoryWhere(),
       },
       select: {
         assigneeId: true,
         dueDate: true,
       },
     });
+
+    const categoryRows = await prisma.task.findMany({
+      where,
+      select: {
+        status: true,
+        workflowStage: { select: { category: true } },
+      },
+    });
+    const categoryCounts = new Map<WorkflowStageCategory, number>();
+    for (const row of categoryRows) {
+      const category = row.workflowStage?.category ?? taskStatusToCategory(row.status);
+      categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+    }
 
     const workload = new Map<string, { openTasks: number; overdueTasks: number }>();
     for (const task of openTasks) {
@@ -407,6 +440,10 @@ export class DashboardService {
       tasksByStatus: statusGroups.map((item) => ({
         status: item.status,
         count: item._count._all,
+      })),
+      tasksByCategory: [...categoryCounts.entries()].map(([category, count]) => ({
+        category,
+        count,
       })),
       completionTrend: [...completionTrendMap.entries()]
         .sort(([a], [b]) => a.localeCompare(b))

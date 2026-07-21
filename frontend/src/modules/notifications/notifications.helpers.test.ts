@@ -64,6 +64,7 @@ describe("mapNotificationPreference", () => {
     slaWarning: true,
     slaBreached: true,
     riskEscalated: true,
+    projectStatusChanged: true,
   };
 
   it("reads taskAssigned from nested or flat payloads", () => {

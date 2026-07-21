@@ -87,6 +87,71 @@ enum ProjectVisibility {
   PRIVATE
 }
 
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+enum ProjectRole {
+  PROJECT_OWNER
+  PROJECT_MANAGER
+  PROJECT_MEMBER
+  PROJECT_VIEWER
+}
+
+enum ProjectHealth {
+  GOOD
+  AT_RISK
+  CRITICAL
+}
+
+enum WorkflowStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WorkflowStageCategory {
+  BACKLOG
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum TemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TemplateVisibility {
+  WORKSPACE
+  SYSTEM
+}
+
+enum CloneJobStatus {
+  PENDING
+  PROCESSING
+  RETRY_WAIT
+  COMPLETED
+  FAILED
+  DEAD
+  CANCELLED
+}
+
+enum MilestoneStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 enum NotificationType {
   TASK_ASSIGNED
   TASK_MENTIONED
@@ -96,6 +161,7 @@ enum NotificationType {
   SLA_WARNING
   SLA_BREACHED
   RISK_ESCALATED
+  PROJECT_STATUS_CHANGED
 }
 
 enum CustomFieldType {
@@ -222,6 +288,9 @@ model User {
   activityEvents           ActivityEvent[]
   onboardings              WorkspaceOnboarding[]
   projectMemberships       ProjectMember[]
+  projectMembersAdded      ProjectMember[]          @relation("ProjectMemberAddedBy")
+  managedProjects          Project[]                @relation("ProjectManager")
+  projectsCreated          Project[]                @relation("ProjectCreator")
   tasksCreated             Task[]                   @relation("TaskCreator")
   tasksAssigned            Task[]                   @relation("TaskAssignee")
   tasksCompleted           Task[]                   @relation("TaskCompleter")
@@ -243,6 +312,10 @@ model User {
   businessCalendarsCreated BusinessCalendar[]       @relation("BusinessCalendarCreator")
   slaPoliciesCreated       SlaPolicy[]              @relation("SlaPolicyCreator")
   automationRunsRetried    AutomationRun[]          @relation("AutomationRunRetrier")
+  workflowsCreated        Workflow[]               @relation("WorkflowCreator")
+  projectTemplatesCreated ProjectTemplate[]        @relation("ProjectTemplateCreator")
+  cloneJobsCreated        CloneJob[]               @relation("CloneJobCreator")
+  milestonesCreated       Milestone[]              @relation("MilestoneCreator")
   lastActiveWorkspace      Workspace?               @relation("UserLastActiveWorkspace", fields: [lastActiveWorkspaceId], references: [id], onDelete: SetNull)
 
   @@index([status])
@@ -293,6 +366,10 @@ model Workspace {
   slaPolicies             SlaPolicy[]
   taskSlaInstances        TaskSlaInstance[]
   automationRuns          AutomationRun[]
+  workflows               Workflow[]
+  projectTemplates        ProjectTemplate[]
+  cloneJobs               CloneJob[]
+  milestones              Milestone[]
   lastActiveUsers         User[]                   @relation("UserLastActiveWorkspace")
 
   @@index([ownerId])
@@ -493,26 +570,129 @@ model WorkspaceModule {
 }
 
 model Project {
-  id          String            @id @default(uuid()) @db.Uuid
-  workspaceId String            @db.Uuid
-  name        String
-  description String?
-  status      String            @default("ACTIVE")
-  visibility  ProjectVisibility @default(WORKSPACE)
-  createdById String?           @db.Uuid
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  deletedAt   DateTime?
+  id               String                     @id @default(uuid()) @db.Uuid
+  workspaceId      String                     @db.Uuid
+  name             String
+  code             String?
+  description      String?
+  status           ProjectStatus              @default(ACTIVE)
+  priority         TaskPriority               @default(MEDIUM)
+  visibility       ProjectVisibility          @default(WORKSPACE)
+  managerId        String?                    @db.Uuid
+  startAt          DateTime?
+  endAt            DateTime?
+  completionPolicy DependencyCompletionPolicy @default(WARN_ONLY)
+  completedAt      DateTime?
+  archivedAt       DateTime?
+  sourceCloneJobId String?                    @unique @db.Uuid
+  createdById      String?                    @db.Uuid
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  deletedAt        DateTime?
 
   workspace              Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  manager                User?                   @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+  creator                User?                   @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: SetNull)
   tasks                  Task[]
   members                ProjectMember[]
   customFieldDefinitions CustomFieldDefinition[]
+  workflowsApplied      ProjectWorkflow[]
+  workflowDrafts        Workflow[]               @relation("ProjectWorkflowDrafts")
+  cloneJobs             CloneJob[]               @relation("CloneJobResultProject")
+  sourceCloneJob        CloneJob?                 @relation("ProjectSourceCloneJob", fields: [sourceCloneJobId], references: [id], onDelete: SetNull)
+  milestones            Milestone[]
 
+  @@unique([workspaceId, code])
   @@index([workspaceId])
   @@index([workspaceId, status, deletedAt])
+  @@index([workspaceId, managerId])
+  @@index([workspaceId, archivedAt, deletedAt])
   @@index([createdById])
   @@map("projects")
+}
+
+model Workflow {
+  id              String         @id @default(uuid()) @db.Uuid
+  familyId        String         @default(uuid()) @db.Uuid
+  workspaceId     String         @db.Uuid
+  sourceProjectId String?        @db.Uuid
+  name            String
+  version         Int
+  status          WorkflowStatus @default(DRAFT)
+  createdById     String?        @db.Uuid
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceProject       Project?            @relation("ProjectWorkflowDrafts", fields: [sourceProjectId], references: [id], onDelete: Cascade)
+  creator             User?               @relation("WorkflowCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  stages              WorkflowStage[]
+  transitions         WorkflowTransition[]
+  projectApplications ProjectWorkflow[]
+
+  @@unique([familyId, version])
+  @@index([workspaceId, status])
+  @@index([workspaceId, familyId])
+  @@index([sourceProjectId, status])
+  @@map("workflows")
+}
+
+model WorkflowStage {
+  id          String                 @id @default(uuid()) @db.Uuid
+  workflowId  String                 @db.Uuid
+  name        String
+  category    WorkflowStageCategory
+  color       String?
+  position    Int
+  isInitial   Boolean                @default(false)
+  isTerminal  Boolean                @default(false)
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  workflow    Workflow              @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+
+  fromTransitions WorkflowTransition[] @relation("TransitionFromStage")
+  toTransitions   WorkflowTransition[] @relation("TransitionToStage")
+
+  @@unique([workflowId, name])
+  @@unique([workflowId, id])
+  @@index([workflowId, position])
+  @@map("workflow_stages")
+}
+
+model WorkflowTransition {
+  id                String   @id @default(uuid()) @db.Uuid
+  workflowId        String   @db.Uuid
+  fromStageId       String   @db.Uuid
+  toStageId         String   @db.Uuid
+  requiredPermission String?
+  conditionsJson    Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workflow     Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  fromStage    WorkflowStage @relation("TransitionFromStage", fields: [workflowId, fromStageId], references: [workflowId, id], onDelete: Cascade)
+  toStage      WorkflowStage @relation("TransitionToStage", fields: [workflowId, toStageId], references: [workflowId, id], onDelete: Cascade)
+
+  @@index([workflowId, fromStageId])
+  @@index([workflowId, toStageId])
+  @@unique([workflowId, fromStageId, toStageId])
+  @@map("workflow_transitions")
+}
+
+model ProjectWorkflow {
+  projectId       String @id @db.Uuid
+  workflowId      String @db.Uuid
+  workflowVersion Int
+  appliedAt       DateTime @default(now())
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, appliedAt])
+  @@map("project_workflows")
 }
 
 model Task {
@@ -520,9 +700,13 @@ model Task {
   workspaceId              String       @db.Uuid
   taskNumber               Int
   projectId                String?      @db.Uuid
+  parentTaskId             String?      @db.Uuid
+  subtaskPosition          Int?
+  milestoneId              String?      @db.Uuid
   title                    String
   description              String?
   status                   TaskStatus   @default(TODO)
+  workflowStageId         String?       @db.Uuid
   priority                 TaskPriority @default(MEDIUM)
   startAt                  DateTime?
   dueDate                  DateTime?
@@ -552,6 +736,10 @@ model Task {
 
   workspace               Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project                 Project?                   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  workflowStage          WorkflowStage?            @relation(fields: [workflowStageId], references: [id], onDelete: SetNull)
+  parentTask             Task?                      @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks               Task[]                     @relation("TaskSubtasks")
+  milestone              Milestone?                 @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
   creator                 User?                      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   assignee                User?                      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   completedBy             User?                      @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
@@ -579,6 +767,9 @@ model Task {
   @@index([workspaceId, assigneeId, status, dueDate])
   @@index([workspaceId, projectId, status])
   @@index([workspaceId, projectId, status, rank])
+  @@index([workflowStageId, projectId, deletedAt, rank])
+  @@index([parentTaskId, subtaskPosition])
+  @@index([milestoneId, subtaskPosition])
   @@index([workspaceId, startAt])
   @@index([workspaceId, dueDate])
   @@index([projectId])
@@ -589,6 +780,32 @@ model Task {
   @@index([riskRecalculateAt])
   @@index([workspaceId, riskLevel])
   @@map("tasks")
+}
+
+model Milestone {
+  id          String          @id @default(uuid()) @db.Uuid
+  workspaceId String          @db.Uuid
+  projectId   String          @db.Uuid
+  name        String
+  description String?
+  status      MilestoneStatus @default(PLANNED)
+  position    Int             @default(0)
+  startAt     DateTime?
+  dueAt       DateTime?
+  completedAt DateTime?
+  createdById String?         @db.Uuid
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("MilestoneCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  tasks     Task[]
+
+  @@index([workspaceId, projectId, position])
+  @@index([projectId, status, dueAt])
+  @@index([createdById])
+  @@map("milestones")
 }
 
 model SavedView {
@@ -619,18 +836,23 @@ model SavedView {
 }
 
 model ProjectMember {
-  id          String   @id @default(uuid()) @db.Uuid
-  workspaceId String   @db.Uuid
-  projectId   String   @db.Uuid
-  userId      String   @db.Uuid
-  createdAt   DateTime @default(now())
+  id          String      @id @default(uuid()) @db.Uuid
+  workspaceId String      @db.Uuid
+  projectId   String      @db.Uuid
+  userId      String      @db.Uuid
+  projectRole ProjectRole @default(PROJECT_MEMBER)
+  joinedAt    DateTime    @default(now())
+  addedById   String?     @db.Uuid
+  createdAt   DateTime    @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addedBy   User?     @relation("ProjectMemberAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
 
   @@unique([projectId, userId])
   @@index([workspaceId, userId])
+  @@index([projectId, projectRole])
   @@map("project_members")
 }
 
@@ -675,8 +897,9 @@ model NotificationPreference {
   recurrenceSkipped  Boolean  @default(true)
   slaWarning         Boolean  @default(true)
   slaBreached        Boolean  @default(true)
-  riskEscalated      Boolean  @default(true)
-  createdAt          DateTime @default(now())
+  riskEscalated         Boolean  @default(true)
+  projectStatusChanged  Boolean  @default(true)
+  createdAt             DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1129,4 +1352,79 @@ model AutomationRun {
   @@index([status, nextRetryAt])
   @@index([taskId, createdAt])
   @@map("automation_runs")
+}
+
+model ProjectTemplate {
+  id           String             @id @default(uuid()) @db.Uuid
+  seriesId     String             @default(uuid()) @db.Uuid
+  workspaceId  String?            @db.Uuid
+  name         String
+  description  String?
+  industryCode String?
+  version      Int                @default(1)
+  visibility   TemplateVisibility @default(WORKSPACE)
+  status       TemplateStatus     @default(DRAFT)
+  contentJson  Json               @default("{}")
+  contentSchemaVersion Int        @default(2)
+  contentHash  String?
+  publishedAt  DateTime?
+  supersededAt DateTime?
+  createdById  String?            @db.Uuid
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  workspace Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator   User?        @relation("ProjectTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  cloneJobs CloneJob[]
+
+  @@unique([seriesId, version])
+  @@index([workspaceId, status])
+  @@index([workspaceId, seriesId])
+  @@index([visibility, status])
+  @@map("project_templates")
+}
+
+model CloneJob {
+  id             String         @id @default(uuid()) @db.Uuid
+  workspaceId    String         @db.Uuid
+  templateId     String         @db.Uuid
+  projectId      String?        @db.Uuid
+  status         CloneJobStatus @default(PENDING)
+  idempotencyKey String
+  payloadJson    Json           @default("{}")
+  requestHash    String
+  templateContentHash String?
+  attempts       Int            @default(0)
+  maxAttempts    Int            @default(5)
+  nextAttemptAt  DateTime?
+  leaseToken     String?
+  leasedBy       String?
+  leasedAt       DateTime?
+  leaseExpiresAt DateTime?
+  heartbeatAt    DateTime?
+  lastErrorCode  String?
+  lastErrorAt    DateTime?
+  cleanupAfter   DateTime?
+  progress       Int            @default(0)
+  errorMessage   String?
+  resultJson     Json?
+  createdById    String?        @db.Uuid
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  template  ProjectTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  project   Project?        @relation("CloneJobResultProject", fields: [projectId], references: [id], onDelete: SetNull)
+  sourceProject Project?    @relation("ProjectSourceCloneJob")
+  creator   User?           @relation("CloneJobCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([leaseExpiresAt])
+  @@index([cleanupAfter])
+  @@index([templateId])
+  @@map("clone_jobs")
 }

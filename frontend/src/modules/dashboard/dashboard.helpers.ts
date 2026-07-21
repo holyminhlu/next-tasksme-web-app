@@ -13,6 +13,7 @@ import {
 import type {
   ActivityEventRecord,
   ActivityListResult,
+  CategoryCount,
   DashboardCharts,
   DashboardFilters,
   DashboardStats,
@@ -22,6 +23,7 @@ import type {
   ProjectCount,
   StatusCount,
   TrendPoint,
+  WorkflowStageCategory,
 } from "./dashboard.types";
 
 // ---------------------------------------------------------------------------
@@ -149,6 +151,31 @@ function mapStatusCount(raw: unknown): StatusCount | null {
   return { status, count };
 }
 
+const WORKFLOW_STAGE_CATEGORIES: WorkflowStageCategory[] = [
+  "BACKLOG",
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "BLOCKED",
+  "COMPLETED",
+  "CANCELLED",
+];
+
+function mapCategoryCount(raw: unknown): CategoryCount | null {
+  const record = asRecord(raw);
+  const category =
+    typeof record?.category === "string" &&
+    (WORKFLOW_STAGE_CATEGORIES as string[]).includes(record.category)
+      ? (record.category as WorkflowStageCategory)
+      : null;
+  const count = pick(record, ["count", "total"], asNumber);
+
+  if (!category || count === null) {
+    return null;
+  }
+
+  return { category, count };
+}
+
 function mapTrendPoint(raw: unknown): TrendPoint | null {
   const record = asRecord(raw);
   const date = pick(record, ["date", "day"], asNonEmptyString);
@@ -210,6 +237,7 @@ export function mapCharts(data: unknown): DashboardCharts {
     return {
       available: false,
       tasksByStatus: [],
+      tasksByCategory: [],
       completionTrend: [],
       overdueByProject: [],
       teamWorkload: null,
@@ -219,6 +247,7 @@ export function mapCharts(data: unknown): DashboardCharts {
   return {
     available: true,
     tasksByStatus: mapList(record?.tasksByStatus, mapStatusCount),
+    tasksByCategory: mapList(record?.tasksByCategory, mapCategoryCount),
     completionTrend: mapList(record?.completionTrend, mapTrendPoint),
     overdueByProject: mapList(record?.overdueByProject, mapProjectCount),
     teamWorkload: Array.isArray(record?.teamWorkload)

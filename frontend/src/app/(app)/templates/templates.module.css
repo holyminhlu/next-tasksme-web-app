@@ -1,0 +1,112 @@
+.page,
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.toolbar,
+.actions,
+.meta,
+.cardHeader {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.toolbar > :first-child {
+  min-width: min(100%, 280px);
+  flex: 1;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.card,
+.job,
+.panel {
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-color-surface);
+  padding: 18px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card p {
+  color: var(--ds-color-text-muted);
+  margin: 0;
+  flex: 1;
+}
+
+.cardHeader,
+.job > div:first-child {
+  justify-content: space-between;
+}
+
+.cardHeader a {
+  color: var(--ds-color-text);
+  text-decoration: none;
+}
+
+.cardHeader a:hover {
+  color: var(--ds-color-primary);
+}
+
+.meta {
+  color: var(--ds-color-text-muted);
+  font-size: 0.85rem;
+}
+
+.job {
+  display: grid;
+  gap: 8px;
+}
+
+.job progress {
+  width: 100%;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 16px;
+}
+
+.editor {
+  min-height: 480px;
+  font-family: var(--font-geist-mono), monospace;
+  resize: vertical;
+}
+
+.previewList,
+.versionList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.previewGroup {
+  margin-top: 18px;
+}
+
+.validation {
+  color: var(--ds-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 800px) {
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+}

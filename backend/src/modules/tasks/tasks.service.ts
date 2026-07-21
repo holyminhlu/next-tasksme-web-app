@@ -20,6 +20,17 @@ import {
 } from "../../lib/task-scope.js";
 import { formatYmd } from "../../lib/timezone.js";
 import { recordActivity } from "../../services/activity.service.js";
+import { assertProjectAccessible as loadAccessibleProject } from "../projects/projects.service.js";
+import {
+  getPublishedProjectWorkflow,
+  resolveInitialStageId,
+  resolveStageForLegacyStatus,
+} from "../../lib/project-workflow.js";
+import {
+  assertTransitionAllowed,
+  legacyStatusForStage,
+  resolveStageForStatus,
+} from "../../lib/workflow-runtime.js";
 import { writeAuditLog } from "../../services/audit.service.js";
 import {
   applySuccessorHandoffs,
@@ -69,6 +80,34 @@ type Actor = {
 };
 const TASK_INCLUDE = {
   project: { select: { id: true, name: true, visibility: true } },
+  parentTask: {
+    select: { id: true, taskNumber: true, title: true, status: true, projectId: true },
+  },
+  subtasks: {
+    where: { deletedAt: null },
+    orderBy: [{ subtaskPosition: "asc" as const }, { taskNumber: "asc" as const }],
+    select: {
+      id: true,
+      taskNumber: true,
+      title: true,
+      status: true,
+      projectId: true,
+      subtaskPosition: true,
+    },
+  },
+  milestone: {
+    select: { id: true, name: true, status: true, position: true, dueAt: true },
+  },
+  workflowStage: {
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      color: true,
+      isInitial: true,
+      isTerminal: true,
+    },
+  },
   assignee: { select: { id: true, fullName: true, email: true } },
   creator: { select: { id: true, fullName: true, email: true } },
   completedBy: { select: { id: true, fullName: true, email: true } },
@@ -88,11 +127,33 @@ function mapTask(task: TaskWithPeople) {
     workspaceId: task.workspaceId,
     taskNumber: task.taskNumber,
     projectId: task.projectId,
+    parentTaskId: task.parentTaskId,
+    parentTask: task.parentTask,
+    subtaskPosition: task.subtaskPosition,
+    milestoneId: task.milestoneId,
+    milestone: task.milestone
+      ? {
+          ...task.milestone,
+          dueAt: task.milestone.dueAt?.toISOString() ?? null,
+        }
+      : null,
+    subtasks: task.subtasks,
     project: task.project,
     projectName: task.project?.name ?? null,
     title: task.title,
     description: task.description,
     status: task.status,
+    workflowStageId: task.workflowStageId,
+    workflowStage: task.workflowStage
+      ? {
+          id: task.workflowStage.id,
+          name: task.workflowStage.name,
+          category: task.workflowStage.category,
+          color: task.workflowStage.color,
+          isInitial: task.workflowStage.isInitial,
+          isTerminal: task.workflowStage.isTerminal,
+        }
+      : null,
     priority: task.priority,
     startAt: task.startAt?.toISOString() ?? null,
     dueDate: task.dueDate?.toISOString() ?? null,
@@ -180,23 +241,16 @@ async function assertProjectAccessible(
   projectId: string,
   actor: Actor,
 ) {
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, workspaceId, deletedAt: null },
-    include: { members: { select: { userId: true } } },
-  });
-  if (!project) {
-    throw new ValidationError("projectId must belong to this workspace", {
-      field: "projectId",
-    });
+  try {
+    return await loadAccessibleProject(workspaceId, projectId, actor);
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ForbiddenError) {
+      throw new ValidationError("projectId must belong to this workspace", {
+        field: "projectId",
+      });
+    }
+    throw error;
   }
-  if (
-    project.visibility === "PRIVATE" &&
-    !isAdmin(actor) &&
-    !project.members.some((member) => member.userId === actor.userId)
-  ) {
-    throw new ForbiddenError("You are not a member of this private project");
-  }
-  return project;
 }
 
 async function assertAssignee(
@@ -262,6 +316,107 @@ function assertDates(startAt: Date | null, dueDate: Date | null) {
       field: "dueDate",
     });
   }
+}
+
+async function assertHierarchyReferences(
+  workspaceId: string,
+  taskId: string | null,
+  projectId: string | null,
+  parentTaskId: string | null,
+  milestoneId: string | null,
+) {
+  if (!projectId && (parentTaskId || milestoneId)) {
+    throw new ValidationError("Task hierarchy requires a project", {
+      field: parentTaskId ? "parentTaskId" : "milestoneId",
+    });
+  }
+
+  let taskDepth = 1;
+  if (parentTaskId) {
+    const seen = new Set<string>();
+    let currentId: string | null = parentTaskId;
+    let depth = 1;
+    while (currentId) {
+      if (currentId === taskId || seen.has(currentId)) {
+        throw new ValidationError("parentTaskId would create a task hierarchy cycle", {
+          field: "parentTaskId",
+        });
+      }
+      seen.add(currentId);
+      const parent: {
+        id: string;
+        workspaceId: string;
+        projectId: string | null;
+        parentTaskId: string | null;
+      } | null = await prisma.task.findFirst({
+        where: { id: currentId, deletedAt: null },
+        select: { id: true, workspaceId: true, projectId: true, parentTaskId: true },
+      });
+      if (!parent || parent.workspaceId !== workspaceId || parent.projectId !== projectId) {
+        throw new ValidationError(
+          "parentTaskId must belong to the same workspace and project",
+          { field: "parentTaskId" },
+        );
+      }
+      depth += 1;
+      if (depth > 5) {
+        throw new ValidationError("Task hierarchy cannot exceed 5 levels", {
+          field: "parentTaskId",
+        });
+      }
+      currentId = parent.parentTaskId;
+    }
+    taskDepth = depth;
+  }
+
+  if (taskId) {
+    const currentTask = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { projectId: true },
+    });
+    if (currentTask?.projectId === projectId) {
+      let frontier = [taskId];
+      let relativeDepth = 1;
+      const descendants = new Set(frontier);
+      while (frontier.length > 0) {
+        const children = await prisma.task.findMany({
+          where: { parentTaskId: { in: frontier }, deletedAt: null },
+          select: { id: true },
+        });
+        frontier = children
+          .map((child) => child.id)
+          .filter((id) => !descendants.has(id));
+        frontier.forEach((id) => descendants.add(id));
+        if (frontier.length > 0) relativeDepth += 1;
+        if (taskDepth + relativeDepth - 1 > 5) {
+          throw new ValidationError("Task hierarchy cannot exceed 5 levels", {
+            field: "parentTaskId",
+          });
+        }
+      }
+    }
+  }
+
+  if (milestoneId) {
+    const milestone = await prisma.milestone.findFirst({
+      where: { id: milestoneId, workspaceId, projectId: projectId! },
+      select: { id: true },
+    });
+    if (!milestone) {
+      throw new ValidationError(
+        "milestoneId must belong to the same workspace and project",
+        { field: "milestoneId" },
+      );
+    }
+  }
+}
+
+async function getNextSubtaskPosition(parentTaskId: string) {
+  const aggregate = await prisma.task.aggregate({
+    where: { parentTaskId, deletedAt: null },
+    _max: { subtaskPosition: true },
+  });
+  return (aggregate._max.subtaskPosition ?? -1) + 1;
 }
 
 function activitySummary(action: string, title: string) {
@@ -376,7 +531,8 @@ export class TasksService {
   ) {
     return this.listTasks(workspaceId, actor, {
       ...query,
-      status: [query.status],
+      status: query.status ? [query.status] : undefined,
+      workflowStageId: query.workflowStageId,
       sortBy: query.sortBy ?? "rank",
       sortOrder: query.sortOrder ?? "asc",
     });
@@ -500,6 +656,23 @@ export class TasksService {
     const project = input.projectId
       ? await assertProjectAccessible(workspaceId, input.projectId, actor)
       : null;
+    const parentTaskId = input.parentTaskId ?? null;
+    const milestoneId = input.milestoneId ?? null;
+    await assertHierarchyReferences(
+      workspaceId,
+      null,
+      project?.id ?? null,
+      parentTaskId,
+      milestoneId,
+    );
+    if (!parentTaskId && input.subtaskPosition != null) {
+      throw new ValidationError("subtaskPosition requires parentTaskId", {
+        field: "subtaskPosition",
+      });
+    }
+    const subtaskPosition = parentTaskId
+      ? (input.subtaskPosition ?? (await getNextSubtaskPosition(parentTaskId)))
+      : null;
     const assigneeId = input.assigneeId === undefined ? actor.userId : input.assigneeId;
     assertCanAssign(actor, assigneeId);
     if (assigneeId) await assertAssignee(workspaceId, assigneeId, project?.id);
@@ -510,6 +683,10 @@ export class TasksService {
       input.status === "BLOCKED" || input.isBlocked
         ? "BLOCKED"
         : (input.status ?? "TODO");
+    const workflowStageId = input.projectId
+      ? (await resolveStageForLegacyStatus(input.projectId, status)) ??
+        (await resolveInitialStageId(input.projectId))
+      : null;
     const now = new Date();
     const task = await prisma.$transaction(async (tx) => {
       const counter = await tx.workspaceTaskCounter.upsert({
@@ -520,7 +697,9 @@ export class TasksService {
       const lastInColumn = await tx.task.findFirst({
         where: {
           workspaceId,
-          status,
+          ...(workflowStageId
+            ? { workflowStageId }
+            : { status, projectId: input.projectId ?? null }),
           projectId: input.projectId ?? null,
           deletedAt: null,
         },
@@ -535,12 +714,16 @@ export class TasksService {
           description: input.description,
           priority: input.priority ?? "MEDIUM",
           status,
+          workflowStageId,
           rank: nextRankAfter(lastInColumn?.rank),
           startAt,
           dueDate,
           completedAt: status === "DONE" ? now : null,
           completedById: status === "DONE" ? actor.userId : null,
           projectId: input.projectId ?? null,
+          parentTaskId,
+          subtaskPosition,
+          milestoneId,
           assigneeId,
           createdById: actor.userId,
           isBlocked: status === "BLOCKED",
@@ -569,14 +752,20 @@ export class TasksService {
     workspaceId: string,
     actor: Actor,
     neighborId: string | null | undefined,
-    targetStatus: MoveTaskInput["targetStatus"],
+    column: { targetStatus?: MoveTaskInput["targetStatus"]; targetStageId?: string | null },
     projectId: string | null,
   ) {
     if (!neighborId) return null;
     const neighbor = await getVisibleTask(workspaceId, neighborId, actor, {
       includeArchived: true,
     });
-    if (neighbor.status !== targetStatus) {
+    if (column.targetStageId) {
+      if (neighbor.workflowStageId !== column.targetStageId) {
+        throw new ValidationError("Neighbor task must be in the target workflow stage", {
+          field: "beforeTaskId",
+        });
+      }
+    } else if (column.targetStatus && neighbor.status !== column.targetStatus) {
       throw new ValidationError("Neighbor task must be in the target status", {
         field: "beforeTaskId",
       });
@@ -593,13 +782,15 @@ export class TasksService {
     tx: Prisma.TransactionClient,
     workspaceId: string,
     projectId: string | null,
-    status: MoveTaskInput["targetStatus"],
+    column: { targetStatus?: MoveTaskInput["targetStatus"]; targetStageId?: string | null },
   ) {
     const rows = await tx.task.findMany({
       where: {
         workspaceId,
         projectId,
-        status,
+        ...(column.targetStageId
+          ? { workflowStageId: column.targetStageId }
+          : { status: column.targetStatus }),
         deletedAt: null,
       },
       orderBy: [{ rank: "asc" }, { taskNumber: "asc" }],
@@ -615,6 +806,122 @@ export class TasksService {
     return ranks;
   }
 
+  private async resolveMoveTarget(
+    workspaceId: string,
+    existing: {
+      id: string;
+      projectId: string | null;
+      workflowStageId: string | null;
+      status: MoveTaskInput["targetStatus"];
+      assigneeId: string | null;
+      priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+      isBlocked: boolean;
+    },
+    input: MoveTaskInput,
+    actor: Actor,
+  ) {
+    const conditionContext = async () => {
+      const [incompleteChecklistItems, incompleteDependencies] = await Promise.all([
+        prisma.checklistItem.count({
+          where: { taskId: existing.id, isCompleted: false },
+        }),
+        prisma.taskDependency.count({
+          where: {
+            workspaceId,
+            successorTaskId: existing.id,
+            predecessorTask: { deletedAt: null, status: { not: "DONE" } },
+          },
+        }),
+      ]);
+      return {
+        task: {
+          assigneeId: existing.assigneeId,
+          priority: existing.priority,
+          isBlocked: existing.isBlocked,
+          checklistComplete: incompleteChecklistItems === 0,
+          dependenciesComplete: incompleteDependencies === 0,
+        },
+      };
+    };
+
+    if (!existing.projectId) {
+      if (input.targetStageId) {
+        throw new ValidationError("Projectless tasks cannot use workflow stages", {
+          field: "targetStageId",
+        });
+      }
+      const targetStatus = input.targetStatus!;
+      return {
+        targetStageId: null,
+        targetStatus,
+        enteringDone: targetStatus === "DONE" && existing.status !== "DONE",
+        reopening: targetStatus !== "DONE" && existing.status === "DONE",
+      };
+    }
+
+    const applied = await getPublishedProjectWorkflow(existing.projectId);
+    if (!applied) {
+      throw new ValidationError("Project has no applied workflow", {
+        field: input.targetStageId ? "targetStageId" : "targetStatus",
+      });
+    }
+    if (
+      !existing.workflowStageId ||
+      !applied.workflow.stages.some((stage) => stage.id === existing.workflowStageId)
+    ) {
+      throw new ValidationError("Task is not assigned to the applied project workflow", {
+        field: "workflowStageId",
+      });
+    }
+
+    if (input.targetStageId) {
+      const stage = applied.workflow.stages.find(
+        (item) => item.id === input.targetStageId && item.isActive,
+      );
+      if (!stage) {
+        throw new ValidationError("Target stage is not active in the applied project workflow", {
+          field: "targetStageId",
+        });
+      }
+      assertTransitionAllowed({
+        transitions: applied.workflow.transitions,
+        fromStageId: existing.workflowStageId,
+        toStageId: stage.id,
+        actorPermissions: actor.permissions ?? [],
+        conditionContext: await conditionContext(),
+      });
+      const targetStatus = legacyStatusForStage(stage);
+      return {
+        targetStageId: stage.id,
+        targetStatus,
+        enteringDone: targetStatus === "DONE" && existing.status !== "DONE",
+        reopening: targetStatus !== "DONE" && existing.status === "DONE",
+      };
+    }
+
+    const targetStatus = input.targetStatus!;
+    const targetStage = resolveStageForStatus(applied.workflow.stages, targetStatus);
+    if (!targetStage || !targetStage.isActive) {
+      throw new ValidationError("Status has no active stage in the applied project workflow", {
+        field: "targetStatus",
+      });
+    }
+    assertTransitionAllowed({
+      transitions: applied.workflow.transitions,
+      fromStageId: existing.workflowStageId,
+      toStageId: targetStage.id,
+      actorPermissions: actor.permissions ?? [],
+      conditionContext: await conditionContext(),
+    });
+    const resolvedStatus = legacyStatusForStage(targetStage);
+    return {
+      targetStageId: targetStage.id,
+      targetStatus: resolvedStatus,
+      enteringDone: resolvedStatus === "DONE" && existing.status !== "DONE",
+      reopening: resolvedStatus !== "DONE" && existing.status === "DONE",
+    };
+  }
+
   async moveTask(
     workspaceId: string,
     taskId: string,
@@ -626,27 +933,29 @@ export class TasksService {
     });
     assertCanMutateTask(actor, existing, "move");
 
+    const target = await this.resolveMoveTarget(workspaceId, existing, input, actor);
+    const column = {
+      targetStatus: target.targetStatus,
+      targetStageId: target.targetStageId,
+    };
+
     const beforeRank = await this.resolveNeighborRank(
       workspaceId,
       actor,
       input.beforeTaskId,
-      input.targetStatus,
+      column,
       existing.projectId,
     );
     const afterRank = await this.resolveNeighborRank(
       workspaceId,
       actor,
       input.afterTaskId,
-      input.targetStatus,
+      column,
       existing.projectId,
     );
 
-    const enteringDone =
-      input.targetStatus === "DONE" && existing.status !== "DONE";
-    const reopening =
-      input.targetStatus !== "DONE" && existing.status === "DONE";
-    const statusChanged = input.targetStatus !== existing.status;
-    const completionDecision = enteringDone
+    const statusChanged = target.targetStatus !== existing.status;
+    const completionDecision = target.enteringDone
       ? await assertCompletionAllowed(
           workspaceId,
           taskId,
@@ -659,12 +968,7 @@ export class TasksService {
     const transactionResult = await prisma.$transaction(async (tx) => {
       let nextRank = rankBetween(beforeRank, afterRank);
       if (!nextRank) {
-        await this.rebalanceColumn(
-          tx,
-          workspaceId,
-          existing.projectId,
-          input.targetStatus,
-        );
+        await this.rebalanceColumn(tx, workspaceId, existing.projectId, column);
         const refreshedBefore = input.beforeTaskId
           ? await tx.task.findUnique({
               where: { id: input.beforeTaskId },
@@ -685,38 +989,39 @@ export class TasksService {
       const result = await tx.task.updateMany({
         where: { id: existing.id, version: input.version },
         data: {
-          status: input.targetStatus,
+          status: target.targetStatus,
+          workflowStageId: target.targetStageId,
           rank: nextRank,
-          isBlocked: input.targetStatus === "BLOCKED",
+          isBlocked: target.targetStatus === "BLOCKED",
           blockedReason:
-            input.targetStatus === "BLOCKED" ? existing.blockedReason : null,
+            target.targetStatus === "BLOCKED" ? existing.blockedReason : null,
           dependencyBlocked:
-            enteringDone || input.targetStatus !== "BLOCKED"
+            target.enteringDone || target.targetStatus !== "BLOCKED"
               ? false
               : existing.dependencyBlocked,
-          completedAt: enteringDone ? new Date() : reopening ? null : undefined,
-          completedById: enteringDone
+          completedAt: target.enteringDone ? new Date() : target.reopening ? null : undefined,
+          completedById: target.enteringDone
             ? actor.userId
-            : reopening
+            : target.reopening
               ? null
               : undefined,
-          dependencyOverrideReason: enteringDone
+          dependencyOverrideReason: target.enteringDone
             ? completionDecision?.overrideReason
-            : reopening
+            : target.reopening
               ? null
               : undefined,
-          dependencyOverriddenById: enteringDone
+          dependencyOverriddenById: target.enteringDone
             ? completionDecision?.overridden
               ? actor.userId
               : null
-            : reopening
+            : target.reopening
               ? null
               : undefined,
-          dependencyOverriddenAt: enteringDone
+          dependencyOverriddenAt: target.enteringDone
             ? completionDecision?.overridden
               ? transitionAt
               : null
-            : reopening
+            : target.reopening
               ? null
               : undefined,
           version: { increment: 1 },
@@ -731,12 +1036,12 @@ export class TasksService {
         await recordTaskStatusTransition(tx, {
           taskId: existing.id,
           fromStatus: existing.status,
-          toStatus: input.targetStatus,
+          toStatus: target.targetStatus,
           changedById: actor.userId,
           changedAt: transitionAt,
         });
       }
-      const unblocked = enteringDone
+      const unblocked = target.enteringDone
         ? await applySuccessorHandoffs(tx, {
             workspaceId,
             predecessorTaskId: existing.id,
@@ -749,7 +1054,7 @@ export class TasksService {
     const { task, unblocked } = transactionResult;
 
     await emitTaskActivity(
-      enteringDone
+      target.enteringDone
         ? "task.completed"
         : statusChanged
           ? "task.status_changed"
@@ -939,6 +1244,40 @@ export class TasksService {
     const nextProjectId =
       input.projectId === undefined ? existing.projectId : input.projectId;
     if (nextProjectId) await assertProjectAccessible(workspaceId, nextProjectId, actor);
+    const projectChanged =
+      input.projectId !== undefined && input.projectId !== existing.projectId;
+    const nextParentTaskId =
+      input.parentTaskId === undefined
+        ? projectChanged
+          ? null
+          : existing.parentTaskId
+        : input.parentTaskId;
+    const nextMilestoneId =
+      input.milestoneId === undefined
+        ? projectChanged
+          ? null
+          : existing.milestoneId
+        : input.milestoneId;
+    await assertHierarchyReferences(
+      workspaceId,
+      existing.id,
+      nextProjectId,
+      nextParentTaskId,
+      nextMilestoneId,
+    );
+    if (!nextParentTaskId && input.subtaskPosition != null) {
+      throw new ValidationError("subtaskPosition requires parentTaskId", {
+        field: "subtaskPosition",
+      });
+    }
+    const parentChanged = nextParentTaskId !== existing.parentTaskId;
+    const nextSubtaskPosition = nextParentTaskId
+      ? input.subtaskPosition != null
+        ? input.subtaskPosition
+        : parentChanged || existing.subtaskPosition === null
+          ? await getNextSubtaskPosition(nextParentTaskId)
+          : existing.subtaskPosition
+      : null;
     const nextAssigneeId =
       input.assigneeId === undefined ? existing.assigneeId : input.assigneeId;
     if (nextAssigneeId) {
@@ -960,6 +1299,36 @@ export class TasksService {
     let nextStatus = input.status ?? existing.status;
     if (input.isBlocked === true) nextStatus = "BLOCKED";
     if (input.isBlocked === false && nextStatus === "BLOCKED") nextStatus = "TODO";
+    let nextWorkflowStageId = existing.workflowStageId;
+    if (nextStatus !== existing.status) {
+      const resolved = await this.resolveMoveTarget(
+        workspaceId,
+        existing,
+        { targetStatus: nextStatus, version: input.version },
+        actor,
+      );
+      nextStatus = resolved.targetStatus;
+      nextWorkflowStageId = resolved.targetStageId;
+    }
+    if (projectChanged) {
+      if (!nextProjectId) {
+        nextWorkflowStageId = null;
+      } else {
+        const targetWorkflow = await getPublishedProjectWorkflow(nextProjectId);
+        const targetStage = targetWorkflow
+          ? resolveStageForStatus(targetWorkflow.workflow.stages, nextStatus)
+          : null;
+        if (!targetStage || !targetStage.isActive) {
+          throw new ValidationError(
+            "Task status cannot be mapped to an active stage in the target project workflow",
+            { field: "projectId" },
+          );
+        }
+        nextWorkflowStageId = targetStage.id;
+        nextStatus = legacyStatusForStage(targetStage);
+      }
+    }
+    if (!nextProjectId) nextWorkflowStageId = null;
     const enteringDone = nextStatus === "DONE" && existing.status !== "DONE";
     const reopening = nextStatus !== "DONE" && existing.status === "DONE";
     const assignmentChanged =
@@ -976,6 +1345,12 @@ export class TasksService {
     const transitionAt = new Date();
 
     const transactionResult = await prisma.$transaction(async (tx) => {
+      if (projectChanged) {
+        await tx.task.updateMany({
+          where: { parentTaskId: existing.id },
+          data: { parentTaskId: null, subtaskPosition: null },
+        });
+      }
       const result = await tx.task.updateMany({
         where: { id: existing.id, version: input.version },
         data: {
@@ -983,9 +1358,24 @@ export class TasksService {
           description: input.description,
           priority: input.priority,
           status: nextStatus,
+          workflowStageId: nextWorkflowStageId,
           startAt: input.startAt === undefined ? undefined : startAt,
           dueDate: input.dueDate === undefined ? undefined : dueDate,
           projectId: input.projectId,
+          parentTaskId:
+            input.parentTaskId !== undefined || projectChanged
+              ? nextParentTaskId
+              : undefined,
+          subtaskPosition:
+            input.parentTaskId !== undefined ||
+            input.subtaskPosition !== undefined ||
+            projectChanged
+              ? nextSubtaskPosition
+              : undefined,
+          milestoneId:
+            input.milestoneId !== undefined || projectChanged
+              ? nextMilestoneId
+              : undefined,
           assigneeId: input.assigneeId,
           isBlocked: nextStatus === "BLOCKED",
           blockedReason: nextStatus === "BLOCKED" ? input.blockedReason : null,

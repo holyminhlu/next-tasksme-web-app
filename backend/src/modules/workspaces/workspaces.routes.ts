@@ -9,6 +9,7 @@ import { projectsRouter } from "../projects/projects.routes.js";
 import { tasksRouter } from "../tasks/tasks.routes.js";
 import { notificationsRouter } from "../notifications/notifications.routes.js";
 import { savedViewsRouter } from "../saved-views/saved-views.routes.js";
+import { templatesRouter } from "../templates/templates.routes.js";
 import { checklistRouter } from "../checklist/checklist.routes.js";
 import { tagsRouter, taskTagsRouter } from "../tags/tags.routes.js";
 import {
@@ -271,6 +272,7 @@ workspacesRouter.use("/:workspaceId/timers", workspaceTimerRouter);
 workspacesRouter.use("/:workspaceId/tags", tagsRouter);
 workspacesRouter.use("/:workspaceId/custom-fields", customFieldsRouter);
 workspacesRouter.use("/:workspaceId/projects", projectsRouter);
+workspacesRouter.use("/:workspaceId/templates", templatesRouter);
 workspacesRouter.use("/:workspaceId/dashboard", dashboardRouter);
 workspacesRouter.use("/:workspaceId/notifications", notificationsRouter);
 workspacesRouter.use("/:workspaceId/saved-views", savedViewsRouter);

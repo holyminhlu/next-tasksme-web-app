@@ -4,8 +4,12 @@ import { disconnectPrisma } from "./config/database.js";
 import { loadEnv } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { attachSocketServer } from "./realtime/socket-hub.js";
+import { ensureSystemTemplates } from "./modules/templates/template-lifecycle.service.js";
 
 const env = loadEnv();
+void ensureSystemTemplates().catch((error) => {
+  logger.error({ err: error }, "Failed to seed system templates");
+});
 const app = createApp();
 const server = http.createServer(app);
 attachSocketServer(server);

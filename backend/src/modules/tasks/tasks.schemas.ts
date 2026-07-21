@@ -52,6 +52,7 @@ const sharedTaskFilterFields = {
   createdById: z.string().uuid().optional(),
   creatorId: z.string().uuid().optional(),
   status: multiValue(taskStatusSchema),
+  workflowStageId: z.string().uuid().optional(),
   priority: multiValue(taskPrioritySchema),
   due: z.enum(["today", "upcoming", "overdue"]).optional(),
   deadlineFrom: z.string().datetime().optional(),
@@ -138,18 +139,28 @@ export const timelineTasksQuerySchema = z
 export const boardTasksQuerySchema = paginationQuerySchema
   .extend({
     ...sharedTaskFilterFields,
-    status: taskStatusSchema,
+    status: taskStatusSchema.optional(),
+    workflowStageId: z.string().uuid().optional(),
     sortBy: z.enum(["rank", "taskNumber", "updatedAt"]).default("rank"),
+  })
+  .refine((value) => value.status || value.workflowStageId, {
+    message: "Either status or workflowStageId is required",
+    path: ["status"],
   })
   .transform(normalizeSharedFilters);
 
 export const moveTaskSchema = z
   .object({
-    targetStatus: taskStatusSchema,
+    targetStatus: taskStatusSchema.optional(),
+    targetStageId: z.string().uuid().optional(),
     beforeTaskId: z.string().uuid().nullable().optional(),
     afterTaskId: z.string().uuid().nullable().optional(),
     version: z.number().int().min(1),
     dependencyOverrideReason: z.string().trim().min(5).max(500).optional(),
+  })
+  .refine((value) => value.targetStatus || value.targetStageId, {
+    message: "Either targetStatus or targetStageId is required",
+    path: ["targetStatus"],
   })
   .refine(
     (value) =>
@@ -212,6 +223,9 @@ export const createTaskSchema = z
     startAt: z.string().datetime().nullable().optional(),
     dueDate: z.string().datetime().nullable().optional(),
     projectId: z.string().uuid().nullable().optional(),
+    parentTaskId: z.string().uuid().nullable().optional(),
+    subtaskPosition: z.number().int().min(0).nullable().optional(),
+    milestoneId: z.string().uuid().nullable().optional(),
     assigneeId: z.string().uuid().nullable().optional(),
     isBlocked: z.boolean().optional(),
     blockedReason: z.string().trim().max(500).nullable().optional(),
@@ -233,6 +247,9 @@ export const updateTaskSchema = z
     startAt: z.string().datetime().nullable().optional(),
     dueDate: z.string().datetime().nullable().optional(),
     projectId: z.string().uuid().nullable().optional(),
+    parentTaskId: z.string().uuid().nullable().optional(),
+    subtaskPosition: z.number().int().min(0).nullable().optional(),
+    milestoneId: z.string().uuid().nullable().optional(),
     assigneeId: z.string().uuid().nullable().optional(),
     isBlocked: z.boolean().optional(),
     blockedReason: z.string().trim().max(500).nullable().optional(),

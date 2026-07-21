@@ -39,10 +39,12 @@ import type {
   TaskStatus,
   TaskViewMode,
   TaskViewUrlState,
+  TaskWorkflowStage,
   TimelineGroup,
   TimelineGroupBy,
   TimelineTasksResult,
   TimelineZoom,
+  WorkflowStageCategory,
 } from "./tasks.types";
 
 /**
@@ -156,7 +158,7 @@ export function projectMembersToCandidates(
     .filter((member) => isActiveMemberStatus(member.status))
     .map((member) => ({
       id: member.userId,
-      name: member.fullName,
+      name: member.fullName ?? member.email ?? member.userId,
       role: member.roleKey,
       status: member.status ?? "ACTIVE",
     }));
@@ -371,6 +373,46 @@ function normalizeProjectVisibility(value: unknown): ProjectVisibility | null {
     : null;
 }
 
+const WORKFLOW_STAGE_CATEGORIES: WorkflowStageCategory[] = [
+  "BACKLOG",
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "BLOCKED",
+  "COMPLETED",
+  "CANCELLED",
+];
+
+function normalizeWorkflowStageCategory(
+  value: unknown,
+): WorkflowStageCategory | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  return (WORKFLOW_STAGE_CATEGORIES as string[]).includes(value)
+    ? (value as WorkflowStageCategory)
+    : null;
+}
+
+function mapWorkflowStage(raw: unknown): TaskWorkflowStage | null {
+  const record = asRecord(raw);
+  if (!record) {
+    return null;
+  }
+  const id = pick(record, ["id"], asNonEmptyString);
+  const category = normalizeWorkflowStageCategory(record.category);
+  if (!id || !category) {
+    return null;
+  }
+  return {
+    id,
+    name: pick(record, ["name"], asNonEmptyString) ?? "",
+    category,
+    color: pick(record, ["color"], asNonEmptyString),
+    isInitial: asBoolean(record.isInitial) ?? false,
+    isTerminal: asBoolean(record.isTerminal) ?? false,
+  };
+}
+
 function mapPersonName(person: Record<string, unknown> | null): string | null {
   if (!person) {
     return null;
@@ -413,6 +455,8 @@ export function mapTask(raw: unknown): TaskRecord | null {
     title,
     description: pick(record, ["description"], asNonEmptyString),
     status: normalizeTaskStatus(record.status) ?? "TODO",
+    workflowStageId: pick(record, ["workflowStageId"], asNonEmptyString),
+    workflowStage: mapWorkflowStage(record.workflowStage),
     priority: normalizeTaskPriority(record.priority) ?? "MEDIUM",
     startAt: pick(record, ["startAt", "start_at"], asNonEmptyString),
     dueDate: pick(record, ["dueDate", "due_date", "dueAt"], asNonEmptyString),
@@ -1484,24 +1528,29 @@ export function resolveBoardMoveNeighbors(
   };
 }
 
-/** Optimistic reorder: move active into target column at over position. */
-export function applyOptimisticBoardMove(
-  columns: Record<TaskStatus, TaskRecord[]>,
+/**
+ * Optimistic reorder for a board of columns keyed by arbitrary string keys
+ * (legacy TaskStatus values or workflow stage ids). `patchTask` updates the
+ * moved task's fields (e.g. status or workflowStageId) to match its new
+ * column before it's re-inserted.
+ */
+export function applyOptimisticColumnMove<K extends string>(
+  columns: Record<K, TaskRecord[]>,
+  columnKeys: readonly K[],
   activeId: string,
-  targetStatus: TaskStatus,
+  targetKey: K,
   overId: string | null,
-): Record<TaskStatus, TaskRecord[]> {
+  patchTask: (task: TaskRecord) => TaskRecord = (task) => task,
+): Record<K, TaskRecord[]> {
   let moved: TaskRecord | null = null;
-  const next: Record<TaskStatus, TaskRecord[]> = { ...columns };
+  const next: Record<K, TaskRecord[]> = { ...columns };
 
-  for (const status of TASK_STATUSES) {
-    const index = next[status].findIndex((task) => task.id === activeId);
+  for (const key of columnKeys) {
+    const column = next[key] ?? [];
+    const index = column.findIndex((task) => task.id === activeId);
     if (index >= 0) {
-      moved = { ...next[status][index]!, status: targetStatus };
-      next[status] = [
-        ...next[status].slice(0, index),
-        ...next[status].slice(index + 1),
-      ];
+      moved = patchTask({ ...column[index]! });
+      next[key] = [...column.slice(0, index), ...column.slice(index + 1)];
       break;
     }
   }
@@ -1510,7 +1559,7 @@ export function applyOptimisticBoardMove(
     return columns;
   }
 
-  const target = [...(next[targetStatus] ?? [])];
+  const target = [...(next[targetKey] ?? [])];
   let insertIndex = target.length;
   if (overId) {
     const overIndex = target.findIndex((task) => task.id === overId);
@@ -1519,8 +1568,25 @@ export function applyOptimisticBoardMove(
     }
   }
   target.splice(insertIndex, 0, moved);
-  next[targetStatus] = target;
+  next[targetKey] = target;
   return next;
+}
+
+/** Optimistic reorder: move active into target status column at over position. */
+export function applyOptimisticBoardMove(
+  columns: Record<TaskStatus, TaskRecord[]>,
+  activeId: string,
+  targetStatus: TaskStatus,
+  overId: string | null,
+): Record<TaskStatus, TaskRecord[]> {
+  return applyOptimisticColumnMove(
+    columns,
+    TASK_STATUSES,
+    activeId,
+    targetStatus,
+    overId,
+    (task) => ({ ...task, status: targetStatus }),
+  );
 }
 
 /** Inclusive YYYY-MM-DD range for the visible calendar month grid (Sun–Sat). */

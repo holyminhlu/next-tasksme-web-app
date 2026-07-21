@@ -57,6 +57,10 @@ export class NotificationsService {
     const preference = await prisma.notificationPreference.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
     });
+    const statusPref =
+      preference && "projectStatusChanged" in preference
+        ? (preference as { projectStatusChanged?: boolean }).projectStatusChanged
+        : undefined;
     return {
       workspaceId,
       userId,
@@ -68,6 +72,7 @@ export class NotificationsService {
       slaWarning: preference?.slaWarning ?? true,
       slaBreached: preference?.slaBreached ?? true,
       riskEscalated: preference?.riskEscalated ?? true,
+      projectStatusChanged: statusPref ?? true,
       updatedAt: preference?.updatedAt.toISOString() ?? null,
     };
   }
@@ -88,7 +93,10 @@ export class NotificationsService {
         slaWarning: input.slaWarning,
         slaBreached: input.slaBreached,
         riskEscalated: input.riskEscalated,
-      },
+        ...(input.projectStatusChanged === undefined
+          ? {}
+          : { projectStatusChanged: input.projectStatusChanged }),
+      } as unknown as never,
       create: {
         workspaceId,
         userId,
@@ -100,8 +108,15 @@ export class NotificationsService {
         slaWarning: input.slaWarning ?? true,
         slaBreached: input.slaBreached ?? true,
         riskEscalated: input.riskEscalated ?? true,
-      },
-    });
+        ...(input.projectStatusChanged === undefined
+          ? {}
+          : { projectStatusChanged: input.projectStatusChanged }),
+      } as unknown as never,
+    } as never);
+    const updatedStatusPref =
+      preference && "projectStatusChanged" in preference
+        ? (preference as { projectStatusChanged?: boolean }).projectStatusChanged
+        : undefined;
     return {
       workspaceId: preference.workspaceId,
       userId: preference.userId,
@@ -113,6 +128,7 @@ export class NotificationsService {
       slaWarning: preference.slaWarning,
       slaBreached: preference.slaBreached,
       riskEscalated: preference.riskEscalated,
+      projectStatusChanged: updatedStatusPref ?? true,
       updatedAt: preference.updatedAt.toISOString(),
     };
   }

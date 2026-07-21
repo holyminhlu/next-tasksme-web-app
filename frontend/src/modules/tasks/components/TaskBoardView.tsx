@@ -26,12 +26,13 @@ import {
   LoadingState,
   useToast,
 } from "@/modules/design-system";
+import { workflowsService, type WorkflowStageRecord } from "@/modules/workflows";
 import {
   TASK_PRIORITY_LABELS,
   TASK_PRIORITY_TONES,
   TASK_STATUSES,
   TASK_STATUS_LABELS,
-  applyOptimisticBoardMove,
+  applyOptimisticColumnMove,
   canMutateTask,
   formatAbsoluteDate,
   isConflictError,
@@ -57,14 +58,19 @@ type ColumnState = {
   error: string | null;
 };
 
-function emptyColumns(): Record<TaskStatus, ColumnState> {
-  return Object.fromEntries(
-    TASK_STATUSES.map((status) => [
-      status,
-      { items: [], total: 0, loading: true, loadingMore: false, error: null },
-    ]),
-  ) as unknown as Record<TaskStatus, ColumnState>;
-}
+const EMPTY_COLUMN_STATE: ColumnState = {
+  items: [],
+  total: 0,
+  loading: true,
+  loadingMore: false,
+  error: null,
+};
+
+type ColumnDescriptor = {
+  key: string;
+  label: string;
+  color: string | null;
+};
 
 function BoardCardContent({ task }: { task: TaskRecord }) {
   const locale =
@@ -104,7 +110,7 @@ function SortableBoardCard({
     isDragging,
   } = useSortable({
     id: task.id,
-    data: { status: task.status, task },
+    data: { task },
     disabled,
   });
 
@@ -129,29 +135,28 @@ function SortableBoardCard({
 }
 
 function BoardColumn({
-  status,
+  column,
   state,
   canDrag,
   onOpen,
   onLoadMore,
 }: {
-  status: TaskStatus;
+  column: ColumnDescriptor;
   state: ColumnState;
   canDrag: (task: TaskRecord) => boolean;
   onOpen: (task: TaskRecord) => void;
-  onLoadMore: (status: TaskStatus) => void;
+  onLoadMore: (key: string) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `column:${status}` });
+  const { setNodeRef, isOver } = useDroppable({ id: `column:${column.key}` });
 
   return (
     <section
       className={`${styles.boardColumn} ${isOver ? styles.boardColumnOver : ""}`.trim()}
-      aria-label={TASK_STATUS_LABELS[status]}
+      aria-label={column.label}
+      style={column.color ? { borderTopColor: column.color } : undefined}
     >
       <header className={styles.boardColumnHeader}>
-        <h3 className={styles.boardColumnTitle}>
-          {TASK_STATUS_LABELS[status]}
-        </h3>
+        <h3 className={styles.boardColumnTitle}>{column.label}</h3>
         <span className={styles.boardColumnCount}>{state.total}</span>
       </header>
       <div ref={setNodeRef} className={styles.boardColumnBody}>
@@ -182,7 +187,7 @@ function BoardColumn({
             variant="secondary"
             className={styles.boardLoadMore}
             loading={state.loadingMore}
-            onClick={() => onLoadMore(status)}
+            onClick={() => onLoadMore(column.key)}
           >
             Load more
           </Button>
@@ -207,16 +212,83 @@ export function TaskBoardView({
   const { toast } = useToast();
   const workspaceId = selectedWorkspace?.id ?? null;
   const canUpdate = hasPermission(permissions, "tasks:update");
+  const singleProjectId = filterState.projectId;
 
-  const [columns, setColumns] = useState(emptyColumns);
+  const [stages, setStages] = useState<WorkflowStageRecord[]>([]);
+  const [stageMode, setStageMode] = useState(false);
+
+  const [columns, setColumns] = useState<Record<string, ColumnState>>({});
   const [activeTask, setActiveTask] = useState<TaskRecord | null>(null);
   const [snapshot, setSnapshot] = useState<Record<
-    TaskStatus,
+    string,
     ColumnState
   > | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+
+  // Load the project's published workflow when exactly one project is
+  // selected; fall back to legacy status columns otherwise (or when the
+  // project has no published workflow with active stages).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWorkflow() {
+      if (!workspaceId || !singleProjectId) {
+        if (!cancelled) {
+          setStages([]);
+          setStageMode(false);
+        }
+        return;
+      }
+
+      const result = await workflowsService.getProjectWorkflow(
+        workspaceId,
+        singleProjectId,
+      );
+      if (cancelled) return;
+
+      const publishedStages = result.ok
+        ? (result.data.published?.stages ?? [])
+            .filter((stage) => stage.isActive)
+            .sort((a, b) => a.position - b.position)
+        : [];
+
+      setStages(publishedStages);
+      setStageMode(publishedStages.length > 0);
+    }
+
+    void loadWorkflow();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, singleProjectId]);
+
+  const columnDescriptors = useMemo<ColumnDescriptor[]>(() => {
+    if (stageMode) {
+      return stages.map((stage) => ({
+        key: stage.id,
+        label: stage.name,
+        color: stage.color,
+      }));
+    }
+    return TASK_STATUSES.map((status) => ({
+      key: status,
+      label: TASK_STATUS_LABELS[status],
+      color: null,
+    }));
+  }, [stageMode, stages]);
+
+  const columnKeys = useMemo(
+    () => columnDescriptors.map((column) => column.key),
+    [columnDescriptors],
+  );
+  const columnKeysSignature = columnKeys.join("|");
+
+  const getColumnState = useCallback(
+    (key: string): ColumnState => columns[key] ?? EMPTY_COLUMN_STATE,
+    [columns],
   );
 
   const baseFilters = useMemo(
@@ -230,36 +302,48 @@ export function TaskBoardView({
   );
 
   const loadColumn = useCallback(
-    async (status: TaskStatus, page = 1, append = false) => {
+    async (key: string, page = 1, append = false) => {
       if (!workspaceId) {
         return;
       }
 
       setColumns((current) => ({
         ...current,
-        [status]: {
-          ...current[status],
+        [key]: {
+          ...(current[key] ?? EMPTY_COLUMN_STATE),
           loading: !append,
           loadingMore: append,
           error: null,
         },
       }));
 
-      const result = await tasksService.listBoardColumn(workspaceId, {
-        ...baseFilters,
-        status,
-        sortBy: "rank",
-        sortOrder: "asc",
-        page,
-        pageSize: COLUMN_PAGE_SIZE,
-      });
+      const result = stageMode
+        ? await tasksService.listBoardColumn(workspaceId, {
+            ...baseFilters,
+            status: undefined,
+            workflowStageId: key,
+            sortBy: "rank",
+            sortOrder: "asc",
+            page,
+            pageSize: COLUMN_PAGE_SIZE,
+          })
+        : await tasksService.listBoardColumn(workspaceId, {
+            ...baseFilters,
+            status: key as TaskStatus,
+            workflowStageId: undefined,
+            sortBy: "rank",
+            sortOrder: "asc",
+            page,
+            pageSize: COLUMN_PAGE_SIZE,
+          });
 
       setColumns((current) => {
+        const existing = current[key] ?? EMPTY_COLUMN_STATE;
         if (!result.ok) {
           return {
             ...current,
-            [status]: {
-              ...current[status],
+            [key]: {
+              ...existing,
               loading: false,
               loadingMore: false,
               error: result.message,
@@ -267,17 +351,17 @@ export function TaskBoardView({
           };
         }
 
-        const prevItems = append ? current[status].items : [];
+        const prevItems = append ? existing.items : [];
         const merged = [
           ...prevItems,
           ...result.data.items.filter(
-            (task) => !prevItems.some((existing) => existing.id === task.id),
+            (task) => !prevItems.some((prevTask) => prevTask.id === task.id),
           ),
         ];
 
         return {
           ...current,
-          [status]: {
+          [key]: {
             items: merged,
             total: result.data.total,
             loading: false,
@@ -287,14 +371,15 @@ export function TaskBoardView({
         };
       });
     },
-    [workspaceId, baseFilters],
+    [workspaceId, baseFilters, stageMode],
   );
 
   const reloadAll = useCallback(() => {
-    for (const status of TASK_STATUSES) {
-      void loadColumn(status, 1, false);
+    for (const key of columnKeys) {
+      void loadColumn(key, 1, false);
     }
-  }, [loadColumn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadColumn, columnKeysSignature]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -313,15 +398,36 @@ export function TaskBoardView({
     );
   }
 
-  function findStatusById(id: string): TaskStatus | null {
+  function patchTaskForColumn(task: TaskRecord, key: string): TaskRecord {
+    if (!stageMode) {
+      return { ...task, status: key as TaskStatus };
+    }
+    const stage = stages.find((item) => item.id === key);
+    return {
+      ...task,
+      workflowStageId: key,
+      workflowStage: stage
+        ? {
+            id: stage.id,
+            name: stage.name,
+            category: stage.category,
+            color: stage.color,
+            isInitial: stage.isInitial,
+            isTerminal: stage.isTerminal,
+          }
+        : task.workflowStage,
+    };
+  }
+
+  function findColumnKeyById(id: string): string | null {
     if (id.startsWith("column:")) {
-      const status = id.slice("column:".length) as TaskStatus;
-      return TASK_STATUSES.includes(status) ? status : null;
+      const key = id.slice("column:".length);
+      return columnKeys.includes(key) ? key : null;
     }
 
-    for (const status of TASK_STATUSES) {
-      if (columns[status].items.some((task) => task.id === id)) {
-        return status;
+    for (const key of columnKeys) {
+      if (getColumnState(key).items.some((task) => task.id === id)) {
+        return key;
       }
     }
 
@@ -340,32 +446,33 @@ export function TaskBoardView({
       return;
     }
 
-    const activeStatus = findStatusById(String(active.id));
-    const overStatus = findStatusById(String(over.id));
-    if (!activeStatus || !overStatus || activeStatus === overStatus) {
+    const activeKey = findColumnKeyById(String(active.id));
+    const overKey = findColumnKeyById(String(over.id));
+    if (!activeKey || !overKey || activeKey === overKey) {
       return;
     }
 
     setColumns((current) => {
       const itemsMap = Object.fromEntries(
-        TASK_STATUSES.map((status) => [status, current[status].items]),
-      ) as Record<TaskStatus, TaskRecord[]>;
+        columnKeys.map((key) => [key, (current[key] ?? EMPTY_COLUMN_STATE).items]),
+      ) as Record<string, TaskRecord[]>;
 
-      const nextItems = applyOptimisticBoardMove(
+      const nextItems = applyOptimisticColumnMove(
         itemsMap,
+        columnKeys,
         String(active.id),
-        overStatus,
+        overKey,
         String(over.id).startsWith("column:") ? null : String(over.id),
+        (task) => patchTaskForColumn(task, overKey),
       );
 
       const next = { ...current };
-      for (const status of TASK_STATUSES) {
-        next[status] = {
-          ...current[status],
-          items: nextItems[status],
-          total:
-            current[status].total +
-            (nextItems[status].length - current[status].items.length),
+      for (const key of columnKeys) {
+        const existing = current[key] ?? EMPTY_COLUMN_STATE;
+        next[key] = {
+          ...existing,
+          items: nextItems[key] ?? [],
+          total: existing.total + ((nextItems[key]?.length ?? 0) - existing.items.length),
         };
       }
       return next;
@@ -386,14 +493,13 @@ export function TaskBoardView({
 
     const activeId = String(active.id);
     const overId = String(over.id);
-    const targetStatus = findStatusById(overId);
-    const sourceTask =
-      snapshot &&
-      TASK_STATUSES.map((status) =>
-        snapshot[status].items.find((task) => task.id === activeId),
-      ).find(Boolean);
+    const targetKey = findColumnKeyById(overId);
+    const baseColumns = snapshot ?? columns;
+    const sourceTask = columnKeys
+      .map((key) => (baseColumns[key] ?? EMPTY_COLUMN_STATE).items.find((task) => task.id === activeId))
+      .find(Boolean);
 
-    if (!targetStatus || !sourceTask || !canDrag(sourceTask)) {
+    if (!targetKey || !sourceTask || !canDrag(sourceTask)) {
       if (snapshot) {
         setColumns(snapshot);
       }
@@ -401,37 +507,40 @@ export function TaskBoardView({
       return;
     }
 
-    const optimistic = applyOptimisticBoardMove(
-      Object.fromEntries(
-        TASK_STATUSES.map((status) => [
-          status,
-          (snapshot ?? columns)[status].items,
-        ]),
-      ) as Record<TaskStatus, TaskRecord[]>,
+    const itemsMap = Object.fromEntries(
+      columnKeys.map((key) => [key, (baseColumns[key] ?? EMPTY_COLUMN_STATE).items]),
+    ) as Record<string, TaskRecord[]>;
+
+    const optimistic = applyOptimisticColumnMove(
+      itemsMap,
+      columnKeys,
       activeId,
-      targetStatus,
+      targetKey,
       overId.startsWith("column:") ? null : overId,
+      (task) => patchTaskForColumn(task, targetKey),
     );
 
     setColumns((current) => {
       const next = { ...current };
-      for (const status of TASK_STATUSES) {
-        next[status] = {
-          ...current[status],
-          items: optimistic[status],
+      for (const key of columnKeys) {
+        next[key] = {
+          ...(current[key] ?? EMPTY_COLUMN_STATE),
+          items: optimistic[key] ?? [],
         };
       }
       return next;
     });
 
     const neighbors = resolveBoardMoveNeighbors(
-      optimistic[targetStatus],
+      optimistic[targetKey] ?? [],
       activeId,
       overId.startsWith("column:") ? null : overId,
     );
 
     const result = await tasksService.moveTask(workspaceId, activeId, {
-      targetStatus,
+      ...(stageMode
+        ? { targetStageId: targetKey }
+        : { targetStatus: targetKey as TaskStatus }),
       beforeTaskId: neighbors.beforeTaskId,
       afterTaskId: neighbors.afterTaskId,
       version: sourceTask.version,
@@ -454,10 +563,11 @@ export function TaskBoardView({
 
     setColumns((current) => {
       const next = { ...current };
-      for (const status of TASK_STATUSES) {
-        next[status] = {
-          ...current[status],
-          items: current[status].items.map((task) =>
+      for (const key of columnKeys) {
+        const existing = current[key] ?? EMPTY_COLUMN_STATE;
+        next[key] = {
+          ...existing,
+          items: existing.items.map((task) =>
             task.id === result.data.id ? result.data : task,
           ),
         };
@@ -485,18 +595,23 @@ export function TaskBoardView({
       onDragEnd={(event) => void onDragEnd(event)}
       onDragCancel={onDragCancel}
     >
+      {stageMode && (
+        <p className={styles.boardModeNote}>
+          Columns follow this project&rsquo;s published workflow stages.
+        </p>
+      )}
       <div className={styles.board}>
-        {TASK_STATUSES.map((status) => (
+        {columnDescriptors.map((column) => (
           <BoardColumn
-            key={status}
-            status={status}
-            state={columns[status]}
+            key={column.key}
+            column={column}
+            state={getColumnState(column.key)}
             canDrag={canDrag}
             onOpen={onOpenTask}
-            onLoadMore={(columnStatus) => {
-              const loaded = columns[columnStatus].items.length;
+            onLoadMore={(key) => {
+              const loaded = getColumnState(key).items.length;
               const page = Math.floor(loaded / COLUMN_PAGE_SIZE) + 1;
-              void loadColumn(columnStatus, page, true);
+              void loadColumn(key, page, true);
             }}
           />
         ))}

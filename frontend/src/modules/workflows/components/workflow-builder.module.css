@@ -1,0 +1,238 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--ds-color-text-secondary);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.previewBoard {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(180px, 1fr);
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.previewColumn {
+  background: var(--ds-color-surface-secondary);
+  border: 1px solid var(--ds-color-border);
+  border-top-width: 3px;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  min-height: 120px;
+}
+
+.previewColumnHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.stageMetaActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.reorderButtons {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.deleteStageRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border: 1px dashed var(--ds-color-border);
+  border-radius: 0.5rem;
+}
+
+.deleteStageActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.transitionsHeader {
+  margin-bottom: 0.75rem;
+}
+
+.transitionsTable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.transitionCard {
+  padding: 0.75rem;
+  border: 1px solid var(--ds-color-border);
+  border-radius: 0.6rem;
+}
+
+.transitionDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0 1.75rem;
+}
+
+.transitionDetails label,
+.dialogForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.conditionList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.conditionRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.4fr) minmax(120px, 1fr) minmax(130px, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.transitionRow {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--ds-color-border);
+}
+
+.transitionRow:last-child {
+  border-bottom: none;
+}
+
+.transitionFrom {
+  font-weight: 600;
+  padding-top: 0.35rem;
+}
+
+.transitionTargets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.editor {
+  border-top: 1px solid var(--ds-color-border);
+  padding-top: 1rem;
+}
+
+.addStageRow {
+  display: grid;
+  grid-template-columns: 1fr 180px 72px auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.validationBox {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--ds-color-danger, #dc2626);
+  border-radius: 0.65rem;
+  color: var(--ds-color-danger, #b91c1c);
+  background: var(--ds-color-surface-secondary);
+}
+
+.validationBox ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.dialogForm,
+.mappingList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.publishDialog {
+  border: 1px solid var(--ds-color-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--ds-color-surface-secondary);
+}
+
+.mappingRow {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1.2fr);
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.mappingRow small {
+  display: block;
+  color: var(--ds-color-text-secondary);
+  margin-top: 0.2rem;
+}
+
+.impactWarning {
+  grid-column: 2;
+  color: var(--ds-color-warning, #b45309);
+  font-size: 0.875rem;
+}
+
+.publishActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .addStageRow {
+    grid-template-columns: 1fr;
+  }
+
+  .mappingRow {
+    grid-template-columns: 1fr;
+  }
+
+  .transitionRow {
+    grid-template-columns: 1fr;
+  }
+
+  .conditionRow {
+    grid-template-columns: 1fr;
+  }
+
+  .impactWarning {
+    grid-column: 1;
+  }
+}

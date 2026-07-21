@@ -14,6 +14,7 @@ export {
   TASK_VIEW_MODES,
   WORKSPACE_TASK_SCOPE_ROLES,
   applyOptimisticBoardMove,
+  applyOptimisticColumnMove,
   calendarMonthRange,
   calendarWeekRange,
   clearFilterChip,

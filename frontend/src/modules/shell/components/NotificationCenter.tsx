@@ -32,6 +32,8 @@ function typeLabel(type: string): string {
       return "SLA breached";
     case "RISK_ESCALATED":
       return "Risk escalated";
+    case "PROJECT_STATUS_CHANGED":
+      return "Project status";
     default:
       return "Notice";
   }

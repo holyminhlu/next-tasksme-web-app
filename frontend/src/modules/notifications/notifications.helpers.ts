@@ -118,6 +118,7 @@ export function mapNotificationPreference(
     slaWarning: asBoolean(nested.slaWarning) ?? true,
     slaBreached: asBoolean(nested.slaBreached) ?? true,
     riskEscalated: asBoolean(nested.riskEscalated) ?? true,
+    projectStatusChanged: asBoolean(nested.projectStatusChanged) ?? true,
   };
 }
 

@@ -26,6 +26,7 @@ const DEFAULT_PREFS: NotificationPreference = {
   slaWarning: true,
   slaBreached: true,
   riskEscalated: true,
+  projectStatusChanged: true,
 };
 
 const WORKSPACE_PREF_FIELDS: Array<{
@@ -72,6 +73,11 @@ const WORKSPACE_PREF_FIELDS: Array<{
     key: "riskEscalated",
     label: "Risk escalated",
     hint: "When a task risk level increases.",
+  },
+  {
+    key: "projectStatusChanged",
+    label: "Project status changed",
+    hint: "When a project you manage changes status.",
   },
 ];
 
